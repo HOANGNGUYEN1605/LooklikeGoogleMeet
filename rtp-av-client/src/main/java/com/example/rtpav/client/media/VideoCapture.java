@@ -158,12 +158,36 @@ public class VideoCapture implements AutoCloseable {
         try {
             BufferedImage img;
             
-            if (camOn && webcam != null && webcam.isOpen()) {
-                // Capture từ webcam thật
-                img = webcam.getImage();
+            if (camOn && webcam != null) {
+                // Kiểm tra webcam có đang mở không
+                if (!webcam.isOpen()) {
+                    // Webcam bị đóng, thử mở lại nếu camera đang bật
+                    synchronized (this) {
+                        if (camOn && webcam != null && !webcam.isOpen()) {
+                            try {
+                                webcam.open();
+                            } catch (Exception e) {
+                                // Nếu không mở được, trả về avatar
+                                img = avatar;
+                            }
+                        }
+                    }
+                }
                 
-                if (img == null) {
-                    // Webcam chưa sẵn sàng, trả về avatar
+                // Capture từ webcam thật
+                if (webcam != null && webcam.isOpen()) {
+                    try {
+                        img = webcam.getImage();
+                        if (img == null) {
+                            // Webcam chưa sẵn sàng, trả về avatar
+                            img = avatar;
+                        }
+                    } catch (Exception e) {
+                        // Lỗi khi capture, không đóng webcam, chỉ trả về avatar
+                        System.err.println("Error getting webcam image (using avatar): " + e.getMessage());
+                        img = avatar;
+                    }
+                } else {
                     img = avatar;
                 }
             } else {

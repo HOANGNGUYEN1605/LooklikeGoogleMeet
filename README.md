@@ -98,20 +98,26 @@ START-SERVER.bat
 
 ### **Chạy Client:**
 
-**Windows:**
+**Windows - Chạy từng client:**
 ```cmd
-START-CLIENT.bat
+START-CLIENT-1.bat  (Alice - Port 6000)
+START-CLIENT-2.bat  (Bob - Port 6001)
+START-CLIENT-3.bat  (Charlie - Port 6002)
+START-CLIENT-4.bat  (David - Port 6003)
+START-CLIENT-5.bat  (Eve - Port 6004)
+START-CLIENT-6.bat  (Frank - Port 6005)
 ```
 
-**Linux/macOS:**
-```bash
-./START-CLIENT.sh
+**Windows - Chạy tất cả 6 client cùng lúc:**
+```cmd
+START-ALL-6-CLIENTS.bat
 ```
 
-**Với tham số:**
-```cmd
-START-CLIENT-VM.bat <SERVER_IP> <CLIENT_NAME> <ROOM_NAME>
-```
+**Lưu ý:**
+- Server phải chạy TRƯỚC khi chạy client
+- Mỗi client sẽ mở một cửa sổ riêng
+- Tất cả client kết nối đến server tại `localhost` và room `demo`
+- Để chạy client trên máy khác, cần chỉnh `--server localhost` thành IP của máy chạy server
 
 ## 📖 Hướng Dẫn Chi Tiết
 

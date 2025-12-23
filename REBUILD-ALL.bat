@@ -1,16 +1,15 @@
 @echo off
-title RTP AV Conference - SERVER
-color 0A
+title Rebuild All Modules
+color 0E
 cls
 echo.
 echo ========================================
-echo   RTP AV Conference - SERVER
-echo   [DANG CHAY - RUNNING]
+echo   REBUILD ALL MODULES
 echo ========================================
 echo.
 cd /d "%~dp0"
 
-REM Check Java
+REM Set Java Home
 set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21.0.8.9-hotspot
 if not exist "%JAVA_HOME%\bin\java.exe" (
     echo ERROR: Java 21 not found at %JAVA_HOME%
@@ -18,6 +17,9 @@ if not exist "%JAVA_HOME%\bin\java.exe" (
     pause
     exit /b 1
 )
+
+REM Set JAVA_HOME for Maven
+set PATH=%JAVA_HOME%\bin;%PATH%
 
 REM Check Maven
 set MAVEN_PATH=%USERPROFILE%\apache-maven-3.9.6\bin\mvn.cmd
@@ -28,37 +30,38 @@ if not exist "%MAVEN_PATH%" (
     exit /b 1
 )
 
-echo [***] DANG KHOI DONG SERVER... [***]
-echo [***] VUI LONG DOI... [***]
+echo [INFO] Cleaning and rebuilding all modules...
+echo [INFO] This will rebuild: rtp-rmi-common, rtp-av-server, rtp-av-client
 echo.
 echo ========================================
-echo   THONG TIN HE THONG:
+echo   SYSTEM INFO:
 echo ========================================
 echo [INFO] Java: %JAVA_HOME%
 echo [INFO] Maven: %MAVEN_PATH%
 echo.
 echo ========================================
-echo   TRANG THAI: DANG CHAY...
-echo ========================================
-echo.
-echo [CHU Y] Cua so nay phai MO de server chay!
-echo [CHU Y] Tim dong "RMI ready" ben duoi!
-echo.
-echo ========================================
-echo   LOG SERVER (Tim "RMI ready"):
+echo   BUILDING...
 echo ========================================
 echo.
 
-call "%MAVEN_PATH%" -pl rtp-av-server exec:java
+call "%MAVEN_PATH%" clean install -DskipTests
+
 if errorlevel 1 (
     echo.
     echo ========================================
-    echo   [ERROR] Failed to start server!
+    echo   [ERROR] Build failed!
     echo ========================================
     echo.
-    echo Please check the error messages above.
     pause
     exit /b 1
 )
+
+echo.
+echo ========================================
+echo   [SUCCESS] Build completed!
+echo ========================================
+echo.
+echo IMPORTANT: Restart the server after rebuild!
+echo.
 pause
 

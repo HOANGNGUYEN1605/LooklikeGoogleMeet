@@ -49,3 +49,10 @@ Desktop.ini
 *.bak
 *.swp
 *~
+
+### Compiled files ###
+*.class
+
+### Database files ###
+database/*.class
+database/reset-password.sql

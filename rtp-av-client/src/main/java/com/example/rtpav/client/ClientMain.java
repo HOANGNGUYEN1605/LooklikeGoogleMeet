@@ -1,5 +1,6 @@
 package com.example.rtpav.client;
 
+import com.example.rtpav.client.NetUtil;
 import com.example.rtpav.client.media.VideoCapture;
 import com.example.rtpav.rmi.ClientCallback;
 import com.example.rtpav.rmi.ConferenceService;
@@ -11,7 +12,6 @@ import java.io.ByteArrayInputStream;
 import java.net.*;
 import java.nio.ByteBuffer;
 import java.rmi.registry.LocateRegistry;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -45,20 +45,35 @@ public class ClientMain {
         final long fSsrc = ssrc;
 
         SwingUtilities.invokeAndWait(() -> {
+            // Hiển thị login dialog trước
+            LoginDialog loginDialog = new LoginDialog(null, fServer);
+            loginDialog.setVisible(true);
+            
+            // Nếu user không join (đóng dialog), thoát chương trình
+            if (!loginDialog.isJoined()) {
+                System.out.println("[CLIENT] User cancelled login, exiting...");
+                System.exit(0);
+                return;
+            }
+            
+            // Lấy thông tin từ dialog
+            final String actualName = loginDialog.getDisplayName();
+            final String actualRoom = loginDialog.getRoom();
+            final String actualServer = loginDialog.getServer();
+            final ConferenceService svc = loginDialog.getConferenceService();
+            
             try {
-                var reg = LocateRegistry.getRegistry(fServer, fRmiPort);
-                ConferenceService svc = (ConferenceService) reg.lookup("conference");
 
                 InetSocketAddress myRtp = NetUtil.endpoint("0.0.0.0", fLocalRtp);
-                InetSocketAddress serverRtpAddr = new InetSocketAddress(fServer, fServerRtp);
+                InetSocketAddress serverRtpAddr = new InetSocketAddress(actualServer, fServerRtp);
 
-                ClientUI ui = new ClientUI(fName, fRoom, fSsrc, svc, myRtp);
+                ClientUI ui = new ClientUI(actualName, actualRoom, fSsrc, svc, myRtp);
                 ClientCallback cb = new ClientCallbackImpl(ui);
 
-                // gửi join
-                svc.join(fRoom, fSsrc, myRtp.getPort(), (com.example.rtpav.rmi.ClientCallback) cb);
-                ui.addChat("[SYSTEM]", "RMI connected to " + fServer + ":" + fRmiPort);
-                ui.addChat("[SYSTEM]", "Joined room " + fRoom + ", UDP bind=" + myRtp);
+                // gửi join với tên người dùng
+                svc.join(actualRoom, fSsrc, actualName, myRtp.getPort(), (com.example.rtpav.rmi.ClientCallback) cb);
+                ui.addChat("[SYSTEM]", "RMI connected to " + actualServer + ":" + fRmiPort);
+                ui.addChat("[SYSTEM]", "Joined room " + actualRoom + ", UDP bind=" + myRtp);
 
                 // UDP socket để gửi/nhận video
                 DatagramSocket udpSocket = new DatagramSocket(fLocalRtp);
@@ -72,6 +87,8 @@ public class ClientMain {
                 // Audio handler - khai báo trước để cả UDP receiver và hooks đều dùng được
                 com.example.rtpav.client.media.AudioIO audio = null;
                 final com.example.rtpav.client.media.AudioIO[] audioRef = {audio};
+                // Track audio sending thread để tránh tạo nhiều thread
+                final java.util.concurrent.atomic.AtomicReference<Thread> audioSendingThreadRef = new java.util.concurrent.atomic.AtomicReference<>();
 
                 // UDP receiver để nhận video từ peers
                 final boolean[] firstFrameReceived = {false};
@@ -145,7 +162,7 @@ public class ClientMain {
                     ui.checkAndShowAvatars();
                 }, 2, 1, TimeUnit.SECONDS);
                 
-                ui.setHooks(new ClientUI.Hooks() {
+                ui.setHooks(new ClientUI.ExtendedHooks() {
                     @Override 
                     public void onToggleCamera(boolean on) { 
                         cam.setCamOn(on); 
@@ -153,56 +170,136 @@ public class ClientMain {
                     
                     @Override 
                     public void onToggleMic(boolean on) {
-                        try {
-                            if (on) {
-                                // Bật mic: khởi tạo AudioIO và bắt đầu gửi audio
-                                if (audioRef[0] == null) {
-                                    audioRef[0] = new com.example.rtpav.client.media.AudioIO();
-                                    audioRef[0].open();
-                                    audioRef[0].start();
-                                }
-                                
-                                // Bắt đầu loop gửi audio
-                                pool.submit(() -> {
-                                    byte[] header = ByteBuffer.allocate(9).array();
-                                    byte[] audioBuf = new byte[320]; // 10ms @ 16kHz mono 16-bit
-                                    
-                                    while (audioRef[0] != null && !Thread.currentThread().isInterrupted()) {
+                        // Chạy trong background thread để không block UI thread
+                        pool.submit(() -> {
+                            try {
+                                if (on) {
+                                    // Dừng thread cũ nếu đang chạy
+                                    Thread oldThread = audioSendingThreadRef.getAndSet(null);
+                                    if (oldThread != null && oldThread.isAlive()) {
+                                        oldThread.interrupt();
                                         try {
-                                            int n = audioRef[0].readMic(audioBuf);
-                                            if (n > 0) {
-                                                // Tạo packet: [SSRC (8 bytes)] + [mediaType=1 (1 byte)] + [audio data]
-                                                ByteBuffer bb = ByteBuffer.wrap(header);
-                                                bb.putLong(fSsrc);
-                                                bb.put((byte) 1); // mediaType = 1 (audio)
-                                                
-                                                byte[] packet = new byte[9 + n];
-                                                System.arraycopy(header, 0, packet, 0, 9);
-                                                System.arraycopy(audioBuf, 0, packet, 9, n);
-                                                
-                                                DatagramPacket udpPkt = new DatagramPacket(
-                                                    packet, packet.length,
-                                                    serverRtpAddr
-                                                );
-                                                udpSocket.send(udpPkt);
-                                            } else {
-                                                Thread.sleep(10); // 10ms
-                                            }
-                                        } catch (Exception e) {
-                                            if (!Thread.currentThread().isInterrupted()) {
-                                                System.err.println("[CLIENT] Error sending audio: " + e.getMessage());
-                                            }
-                                            break;
+                                            oldThread.join(100); // Đợi tối đa 100ms
+                                        } catch (InterruptedException e) {
+                                            Thread.currentThread().interrupt();
                                         }
                                     }
-                                });
-                            } else {
-                                // Tắt mic: dừng gửi nhưng vẫn giữ speaker để nghe peers
-                                // Không đóng audio để vẫn có thể phát audio từ peers
+                                    
+                                    // Bật mic: khởi tạo AudioIO và bắt đầu gửi audio
+                                    if (audioRef[0] == null) {
+                                        try {
+                                            System.out.println("[CLIENT] Initializing AudioIO for microphone...");
+                                            audioRef[0] = new com.example.rtpav.client.media.AudioIO();
+                                            audioRef[0].open();
+                                            audioRef[0].start();
+                                            System.out.println("[CLIENT] AudioIO initialized and started successfully - microphone is ready");
+                                        } catch (Exception e) {
+                                            System.err.println("[CLIENT] ERROR: Failed to initialize AudioIO: " + e.getMessage());
+                                            e.printStackTrace();
+                                            audioRef[0] = null;
+                                            // Thông báo lỗi nhưng vẫn tiếp tục (có thể retry sau)
+                                            System.err.println("[CLIENT] WARNING: Mic button is ON but audio cannot be sent. Please check microphone permissions.");
+                                            return;
+                                        }
+                                    } else {
+                                        System.out.println("[CLIENT] AudioIO already exists, reusing for microphone");
+                                        // Đảm bảo mic line đang chạy
+                                        try {
+                                            audioRef[0].startMic();
+                                            // Đợi một chút để mic line khởi động hoàn toàn
+                                            Thread.sleep(50);
+                                        } catch (Exception e) {
+                                            System.err.println("[CLIENT] Error starting mic line: " + e.getMessage());
+                                            e.printStackTrace();
+                                        }
+                                    }
+                                    
+                                    // Bắt đầu loop gửi audio (chỉ một thread)
+                                    Thread audioThread = new Thread(() -> {
+                                        byte[] header = ByteBuffer.allocate(9).array();
+                                        byte[] audioBuf = new byte[320]; // 10ms @ 16kHz mono 16-bit
+                                        int packetCount = 0;
+                                        
+                                        System.out.println("[CLIENT] Audio sending thread started - mic is active");
+                                        
+                                        while (audioRef[0] != null && !Thread.currentThread().isInterrupted()) {
+                                            try {
+                                                int n = audioRef[0].readMic(audioBuf);
+                                                if (n > 0) {
+                                                    // Tạo packet: [SSRC (8 bytes)] + [mediaType=1 (1 byte)] + [audio data]
+                                                    ByteBuffer bb = ByteBuffer.wrap(header);
+                                                    bb.putLong(fSsrc);
+                                                    bb.put((byte) 1); // mediaType = 1 (audio)
+                                                    
+                                                    byte[] packet = new byte[9 + n];
+                                                    System.arraycopy(header, 0, packet, 0, 9);
+                                                    System.arraycopy(audioBuf, 0, packet, 9, n);
+                                                    
+                                                    DatagramPacket udpPkt = new DatagramPacket(
+                                                        packet, packet.length,
+                                                        serverRtpAddr
+                                                    );
+                                                    udpSocket.send(udpPkt);
+                                                    
+                                                    // Log mỗi 100 packet để xác nhận đang gửi
+                                                    packetCount++;
+                                                    if (packetCount % 100 == 0) {
+                                                        System.out.println("[CLIENT] Audio packets sent: " + packetCount + " (mic is active)");
+                                                    }
+                                                } else {
+                                                    try {
+                                                        Thread.sleep(10); // 10ms
+                                                    } catch (InterruptedException e) {
+                                                        Thread.currentThread().interrupt();
+                                                        break; // Thoát khi bị interrupt
+                                                    }
+                                                }
+                                            } catch (Exception e) {
+                                                if (e instanceof InterruptedException) {
+                                                    Thread.currentThread().interrupt();
+                                                    break; // Thoát khi bị interrupt
+                                                }
+                                                if (!Thread.currentThread().isInterrupted()) {
+                                                    System.err.println("[CLIENT] Error sending audio: " + e.getMessage());
+                                                    e.printStackTrace();
+                                                }
+                                                break;
+                                            }
+                                        }
+                                        System.out.println("[CLIENT] Audio sending thread stopped (total packets: " + packetCount + ")");
+                                    }, "AudioSender");
+                                    audioThread.setDaemon(true);
+                                    audioThread.start();
+                                    audioSendingThreadRef.set(audioThread);
+                                    System.out.println("[CLIENT] Mic is ON - audio sending thread created and started");
+                                } else {
+                                    // Tắt mic: dừng thread gửi audio và dừng mic line nhưng vẫn giữ speaker để nghe peers
+                                    Thread oldThread = audioSendingThreadRef.getAndSet(null);
+                                    if (oldThread != null && oldThread.isAlive()) {
+                                        oldThread.interrupt();
+                                        try {
+                                            oldThread.join(200); // Đợi tối đa 200ms để thread dừng hoàn toàn
+                                        } catch (InterruptedException e) {
+                                            Thread.currentThread().interrupt();
+                                        }
+                                    }
+                                    
+                                    // Dừng mic line để đảm bảo không còn đọc từ mic
+                                    if (audioRef[0] != null) {
+                                        try {
+                                            audioRef[0].stopMic();
+                                            System.out.println("[CLIENT] Mic line stopped (speaker still active)");
+                                        } catch (Exception e) {
+                                            System.err.println("[CLIENT] Error stopping mic line: " + e.getMessage());
+                                        }
+                                    }
+                                    System.out.println("[CLIENT] Mic turned off (speaker still active)");
+                                }
+                            } catch (Exception e) {
+                                System.err.println("[CLIENT] Error toggling mic: " + e.getMessage());
+                                e.printStackTrace();
                             }
-                        } catch (Exception e) {
-                            System.err.println("[CLIENT] Error toggling mic: " + e.getMessage());
-                        }
+                        });
                     }
                     
                     @Override 
@@ -210,6 +307,18 @@ public class ClientMain {
                         try { 
                             svc.sendChat(fRoom, fSsrc, fName, msg); 
                         } catch (Exception ignored) {} 
+                    }
+                    
+                    @Override
+                    public void onSendPrivateChat(long toSsrc, String msg) {
+                        try {
+                            System.out.printf("[CLIENT] Sending private chat: toSsrc=%d, msg=%s%n", toSsrc, msg);
+                            svc.sendPrivateChat(fRoom, fSsrc, fName, toSsrc, msg);
+                            System.out.printf("[CLIENT] Private chat sent successfully%n");
+                        } catch (Exception e) {
+                            System.err.println("[CLIENT] Error sending private chat: " + e.getMessage());
+                            e.printStackTrace();
+                        }
                     }
                     
                     @Override 

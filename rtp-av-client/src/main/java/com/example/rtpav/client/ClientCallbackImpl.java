@@ -27,4 +27,11 @@ public class ClientCallbackImpl extends UnicastRemoteObject implements ClientCal
     public void chat(String roomId, String fromName, String message, String reserved) throws RemoteException {
         ui.addChat(fromName, message);
     }
+
+    @Override
+    public void onPrivateChat(String roomId, long fromSsrc, String fromName, String message) throws RemoteException {
+        System.out.printf("[CLIENT] Received private chat: fromSsrc=%d, fromName=%s, msg=%s%n", 
+            fromSsrc, fromName, message);
+        ui.addPrivateChat(fromSsrc, fromName, message);
+    }
 }

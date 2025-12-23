@@ -33,4 +33,17 @@
             <artifactId>slf4j-simple</artifactId>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.6.2</version>
+                <configuration>
+                    <mainClass>com.example.rtpav.client.ClientMain</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

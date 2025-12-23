@@ -18,4 +18,9 @@ public interface ClientCallback extends Remote {
      * Tham số thứ 4 'reserved' để tương thích ngược (không cần dùng).
      */
     void chat(String roomId, String fromName, String message, String reserved) throws RemoteException;
+
+    /**
+     * Nhận 1 tin nhắn chat riêng từ một peer cụ thể.
+     */
+    void onPrivateChat(String roomId, long fromSsrc, String fromName, String message) throws RemoteException;
 }

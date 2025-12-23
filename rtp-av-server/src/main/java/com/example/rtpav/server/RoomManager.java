@@ -12,9 +12,9 @@ public class RoomManager {
     // ssrc -> roomId
     private final Map<Long, String> ssrcToRoom = new ConcurrentHashMap<>();
 
-    public void join(String roomId, long ssrc, InetSocketAddress ep) {
+    public void join(String roomId, long ssrc, String name, InetSocketAddress ep) {
         rooms.computeIfAbsent(roomId, k -> new ConcurrentHashMap<>())
-                .put(ssrc, new ClientInfo(roomId, ssrc, ep));
+                .put(ssrc, new ClientInfo(roomId, ssrc, name, ep));
         ssrcToRoom.put(ssrc, roomId);
     }
 
