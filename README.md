@@ -1,15 +1,28 @@
-# RTP AV Conference - Hướng Dẫn Setup
+# RTP AV Conference - Video Conference Application
 
 ## 📋 Giới Thiệu
 
-Project này là một hệ thống video conference sử dụng RTP (Real-time Transport Protocol) và RMI (Remote Method Invocation) để kết nối nhiều clients với nhau thông qua server.
+Project này là một hệ thống video conference với giao diện giống Google Meet, sử dụng RTP (Real-time Transport Protocol) và RMI (Remote Method Invocation) để kết nối nhiều clients với nhau thông qua server.
+
+## ✨ Tính Năng
+
+- ✅ **Video & Audio Conference**: Hỗ trợ video và audio real-time giữa nhiều người dùng
+- ✅ **Database Authentication**: Đăng nhập/đăng ký với MySQL database
+- ✅ **Chat System**: 
+  - Chat chung (public chat) cho tất cả người trong phòng
+  - Chat riêng (private chat) giữa 2 người
+  - Emoji picker để gửi emoji
+  - Gửi file (tối đa 10MB)
+- ✅ **Modern UI**: Giao diện đẹp, tối giản giống Google Meet
+- ✅ **Mic & Camera Control**: Bật/tắt mic và camera dễ dàng
 
 ## ✅ Yêu Cầu Hệ Thống
 
 - **Java 21** (bắt buộc)
 - **Maven 3.6+**
+- **Docker Desktop** (để chạy MySQL database)
 - **Windows/Linux/macOS**
-- **ZeroTier** (để kết nối từ xa, không cùng mạng LAN)
+- **ZeroTier** (để kết nối từ xa, không cùng mạng LAN - tùy chọn)
 
 ## 🚀 Setup Nhanh
 
@@ -75,7 +88,22 @@ sudo zerotier-cli join <NETWORK_ID>
 1. Tải từ: https://www.zerotier.com/download/
 2. Cài đặt và join network
 
-### **Bước 4: Build Project**
+### **Bước 4: Setup Database với Docker**
+
+**Windows:**
+```cmd
+cd database
+setup-docker-mysql.bat
+```
+
+Script này sẽ:
+- Tạo MySQL container trong Docker
+- Setup database `rtp_conference`
+- Tạo user mặc định: `admin` / `admin123`
+
+**Lưu ý:** Đảm bảo Docker Desktop đang chạy trước khi chạy script.
+
+### **Bước 5: Build Project**
 
 ```bash
 cd rtp-av-conference
@@ -84,7 +112,26 @@ mvn clean install
 
 ## 🎯 Chạy Project
 
-### **Chạy Server:**
+### **Bước 1: Đảm bảo Database đang chạy**
+
+Kiểm tra MySQL container:
+```cmd
+docker ps
+```
+
+Nếu container không chạy:
+```cmd
+cd database
+docker start rtp-mysql
+```
+
+Hoặc tạo lại container:
+```cmd
+cd database
+recreate-mysql-container.bat
+```
+
+### **Bước 2: Chạy Server**
 
 **Windows:**
 ```cmd
@@ -96,7 +143,9 @@ START-SERVER.bat
 ./START-SERVER.sh
 ```
 
-### **Chạy Client:**
+Đợi đến khi thấy dòng "RMI ready" trong console.
+
+### **Bước 3: Chạy Client**
 
 **Windows - Chạy từng client:**
 ```cmd
@@ -113,8 +162,15 @@ START-CLIENT-6.bat  (Frank - Port 6005)
 START-ALL-6-CLIENTS.bat
 ```
 
+### **Bước 4: Đăng nhập**
+
+- **Username mặc định:** `admin`
+- **Password mặc định:** `admin123`
+- Hoặc đăng ký tài khoản mới trong ứng dụng
+
 **Lưu ý:**
 - Server phải chạy TRƯỚC khi chạy client
+- Database phải đang chạy (Docker container `rtp-mysql`)
 - Mỗi client sẽ mở một cửa sổ riêng
 - Tất cả client kết nối đến server tại `localhost` và room `demo`
 - Để chạy client trên máy khác, cần chỉnh `--server localhost` thành IP của máy chạy server
@@ -127,15 +183,51 @@ START-ALL-6-CLIENTS.bat
 
 ## 🔧 Troubleshooting
 
-Xem file [FIX_IDE_ERRORS.md](FIX_IDE_ERRORS.md) nếu gặp lỗi IDE.
+### Database không kết nối được
+
+Nếu gặp lỗi kết nối database sau khi tạo lại Docker container:
+```cmd
+cd database
+fix-database-connection.bat
+```
+
+Hoặc tạo lại container:
+```cmd
+cd database
+recreate-mysql-container.bat
+```
+
+### Mic không tắt được
+
+Đã được fix trong version mới nhất. Nếu vẫn gặp vấn đề, hãy rebuild project:
+```cmd
+REBUILD-ALL.bat
+```
+
+### File không tải được
+
+- Kiểm tra console log để xem fileId
+- Đảm bảo file không quá 10MB
+- Thử gửi lại file
 
 ## 📞 Hỗ Trợ
 
 Nếu gặp vấn đề, kiểm tra:
 1. Java version phải là 21
 2. Maven đã cài đúng chưa
-3. ZeroTier đã join network chưa
-4. Firewall có block ports không
+3. Docker Desktop đang chạy và MySQL container đang chạy
+4. ZeroTier đã join network chưa (nếu kết nối từ xa)
+5. Firewall có block ports không
+
+## 📝 Changelog
+
+### Version mới nhất:
+- ✅ Thêm database authentication (MySQL với Docker)
+- ✅ Cải thiện giao diện chat (màu sắc, contrast)
+- ✅ Thêm emoji picker
+- ✅ Thêm tính năng gửi file (tối đa 10MB)
+- ✅ Fix lỗi mic không tắt đúng
+- ✅ Cải thiện tab switching trong chat
 
 
 
