@@ -1,0 +1,194 @@
+========================================
+HƯỚNG DẪN CẤU HÌNH SERVER CHO ZEROTIER
+========================================
+
+Mục đích: Cho phép client từ xa kết nối đến server qua ZeroTier VPN
+
+========================================
+BƯỚC 1: CÀI ĐẶT ZEROTIER
+========================================
+
+1.1. Tải ZeroTier:
+   - Truy cập: https://www.zerotier.com/download/
+   - Tải và cài đặt ZeroTier One cho Windows
+   - Hoặc dùng winget: winget install ZeroTier.ZeroTierOne
+
+1.2. Khởi động ZeroTier:
+   - Mở ZeroTier One từ Start Menu
+   - Icon ZeroTier sẽ xuất hiện ở system tray (góc dưới bên phải)
+
+========================================
+BƯỚC 2: TẠO VÀ THAM GIA ZEROTIER NETWORK
+========================================
+
+2.1. Tạo Network mới (nếu chưa có):
+   - Đăng nhập vào: https://my.zerotier.com/
+   - Tạo tài khoản nếu chưa có
+   - Vào "Networks" → "Create A Network"
+   - Ghi lại Network ID (16 ký tự, ví dụ: a0b1c2d3e4f5g6h7)
+
+2.2. Tham gia Network trên Server:
+   - Click chuột phải vào icon ZeroTier ở system tray
+   - Chọn "Join Network..."
+   - Nhập Network ID đã tạo
+   - Click "Join"
+
+2.3. Authorize Server trong ZeroTier Central:
+   - Vào https://my.zerotier.com/
+   - Chọn Network vừa tạo
+   - Tìm device của bạn (tên máy tính) trong danh sách "Members"
+   - Tick vào checkbox "Auth?" để authorize device này
+   - Ghi lại ZeroTier IP được cấp (ví dụ: 10.147.20.100)
+     → Đây là IP mà client sẽ dùng để kết nối!
+
+========================================
+BƯỚC 3: KIỂM TRA ZEROTIER IP CỦA SERVER
+========================================
+
+3.1. Kiểm tra IP:
+   - Click chuột phải vào icon ZeroTier → "Show Networks"
+   - Hoặc mở Command Prompt và chạy:
+     ipconfig | findstr "ZeroTier"
+   - Ghi lại IP address (ví dụ: 10.147.20.100)
+
+3.2. Lưu IP này:
+   - Bạn sẽ cần cung cấp IP này cho client
+   - IP này sẽ không thay đổi trừ khi bạn leave/join lại network
+
+========================================
+BƯỚC 4: CẤU HÌNH FIREWALL WINDOWS
+========================================
+
+4.1. Mở Windows Defender Firewall:
+   - Tìm "Windows Defender Firewall" trong Start Menu
+   - Hoặc: Control Panel → System and Security → Windows Defender Firewall
+
+4.2. Cho phép các port cần thiết:
+   
+   Port 1099 (RMI Registry):
+   - Click "Advanced settings" (bên trái)
+   - Click "Inbound Rules" → "New Rule..."
+   - Chọn "Port" → Next
+   - Chọn "TCP" → Specific local ports: 1099 → Next
+   - Chọn "Allow the connection" → Next
+   - Tick tất cả (Domain, Private, Public) → Next
+   - Tên: "RTP Conference - RMI Registry" → Finish
+
+   Port 2099 (RMI Service):
+   - Tương tự, tạo rule cho TCP port 2099
+   - Tên: "RTP Conference - RMI Service"
+
+   Port 5004 (RTP UDP):
+   - Tạo rule cho UDP port 5004
+   - Tên: "RTP Conference - RTP UDP"
+
+4.3. Hoặc dùng PowerShell (chạy với quyền Admin):
+   ```
+   netsh advfirewall firewall add rule name="RTP Conference - RMI Registry" dir=in action=allow protocol=TCP localport=1099
+   netsh advfirewall firewall add rule name="RTP Conference - RMI Service" dir=in action=allow protocol=TCP localport=2099
+   netsh advfirewall firewall add rule name="RTP Conference - RTP UDP" dir=in action=allow protocol=UDP localport=5004
+   ```
+
+========================================
+BƯỚC 5: KHỞI ĐỘNG SERVER
+========================================
+
+5.1. Đảm bảo Docker và MySQL đang chạy:
+   - Mở Docker Desktop
+   - Chạy: SETUP-AFTER-RESTART.bat (nếu chưa chạy MySQL)
+
+5.2. Khởi động Server:
+   - Chạy: START-SERVER.bat
+   - Đợi đến khi thấy dòng "RMI ready (registry=1099, service=2099), RTP UDP=5004"
+
+5.3. Xác nhận Server đang lắng nghe:
+   - Server sẽ tự động bind vào tất cả network interfaces (0.0.0.0)
+   - Điều này có nghĩa là nó sẽ lắng nghe trên cả:
+     * Localhost (127.0.0.1)
+     * LAN IP (192.168.x.x)
+     * ZeroTier IP (10.147.20.x)
+
+========================================
+BƯỚC 6: KIỂM TRA KẾT NỐI
+========================================
+
+6.1. Kiểm tra Server đang lắng nghe:
+   - Mở Command Prompt và chạy:
+     netstat -an | findstr "1099"
+     netstat -an | findstr "2099"
+     netstat -an | findstr "5004"
+   - Bạn sẽ thấy các dòng như:
+     TCP    0.0.0.0:1099    0.0.0.0:0    LISTENING
+     TCP    0.0.0.0:2099    0.0.0.0:0    LISTENING
+     UDP    0.0.0.0:5004    *:*
+
+6.2. Test từ chính máy server:
+   - Chạy client với: --server 127.0.0.1
+   - Nếu kết nối được → Server đang chạy đúng
+
+========================================
+BƯỚC 7: CUNG CẤP THÔNG TIN CHO CLIENT
+========================================
+
+7.1. Thông tin cần cung cấp:
+   - ZeroTier Network ID: [Network ID của bạn]
+   - Server ZeroTier IP: [IP từ bước 3.1, ví dụ: 10.147.20.100]
+   - RMI Port: 1099 (mặc định)
+   - RTP Port: 5004 (mặc định)
+
+7.2. Ví dụ thông tin:
+   ```
+   ZeroTier Network ID: a0b1c2d3e4f5g6h7
+   Server IP: 10.147.20.100
+   RMI Port: 1099
+   RTP Port: 5004
+   ```
+
+========================================
+BƯỚC 8: XỬ LÝ SỰ CỐ
+========================================
+
+8.1. Client không kết nối được:
+   - Kiểm tra ZeroTier đang chạy: icon ở system tray phải có dấu ✓
+   - Kiểm tra Server đã được authorize trong ZeroTier Central
+   - Kiểm tra Firewall đã mở các port
+   - Kiểm tra Server đang chạy: netstat -an | findstr "1099"
+
+8.2. Kiểm tra ZeroTier kết nối:
+   - Click chuột phải icon ZeroTier → "Show Networks"
+   - Phải thấy "Status: OK" và có IP address
+
+8.3. Test ping từ client:
+   - Client chạy: ping [Server ZeroTier IP]
+   - Nếu ping được → ZeroTier đang hoạt động
+   - Nếu không ping được → Kiểm tra ZeroTier network
+
+8.4. Kiểm tra port:
+   - Từ client, dùng telnet hoặc PowerShell:
+     Test-NetConnection -ComputerName [Server IP] -Port 1099
+   - Nếu "TcpTestSucceeded: True" → Port đang mở
+
+========================================
+LƯU Ý QUAN TRỌNG
+========================================
+
+1. ZeroTier IP có thể thay đổi nếu bạn leave/join lại network
+2. Server phải luôn chạy ZeroTier và được authorize trong network
+3. Firewall phải cho phép các port: 1099 (TCP), 2099 (TCP), 5004 (UDP)
+4. Server không cần thay đổi code, chỉ cần đảm bảo ZeroTier và Firewall đúng
+5. Nếu server có nhiều network adapter, đảm bảo ZeroTier adapter được ưu tiên
+
+========================================
+TÓM TẮT CÁC BƯỚC
+========================================
+
+✓ Cài đặt ZeroTier One
+✓ Tạo/Tham gia ZeroTier Network
+✓ Authorize server trong ZeroTier Central
+✓ Ghi lại ZeroTier IP của server
+✓ Mở Firewall cho port 1099, 2099, 5004
+✓ Khởi động Server (START-SERVER.bat)
+✓ Cung cấp ZeroTier IP cho client
+
+========================================
+

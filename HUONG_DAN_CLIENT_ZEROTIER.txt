@@ -1,0 +1,227 @@
+========================================
+HƯỚNG DẪN KẾT NỐI CLIENT ĐẾN SERVER QUA ZEROTIER
+========================================
+
+Mục đích: Kết nối client từ xa đến server qua ZeroTier VPN
+
+========================================
+BƯỚC 1: CÀI ĐẶT ZEROTIER
+========================================
+
+1.1. Tải ZeroTier:
+   - Truy cập: https://www.zerotier.com/download/
+   - Tải và cài đặt ZeroTier One cho Windows
+   - Hoặc dùng winget: winget install ZeroTier.ZeroTierOne
+
+1.2. Khởi động ZeroTier:
+   - Mở ZeroTier One từ Start Menu
+   - Icon ZeroTier sẽ xuất hiện ở system tray (góc dưới bên phải)
+   - Đợi ZeroTier khởi động hoàn toàn
+
+========================================
+BƯỚC 2: THAM GIA ZEROTIER NETWORK
+========================================
+
+2.1. Nhận thông tin từ Server:
+   - Server sẽ cung cấp cho bạn:
+     * ZeroTier Network ID (16 ký tự, ví dụ: a0b1c2d3e4f5g6h7)
+     * Server ZeroTier IP (ví dụ: 10.147.20.100)
+     * RMI Port (thường là 1099)
+     * RTP Port (thường là 5004)
+
+2.2. Tham gia Network:
+   - Click chuột phải vào icon ZeroTier ở system tray
+   - Chọn "Join Network..."
+   - Nhập Network ID mà server cung cấp
+   - Click "Join"
+
+2.3. Authorize Client trong ZeroTier Central:
+   - Server (hoặc người quản lý network) cần:
+     * Đăng nhập vào https://my.zerotier.com/
+     * Chọn Network
+     * Tìm device của bạn trong danh sách "Members"
+     * Tick vào checkbox "Auth?" để authorize
+   - Sau khi được authorize, bạn sẽ nhận được ZeroTier IP
+
+2.4. Kiểm tra ZeroTier IP của Client:
+   - Click chuột phải vào icon ZeroTier → "Show Networks"
+   - Hoặc mở Command Prompt và chạy:
+     ipconfig | findstr "ZeroTier"
+   - Ghi lại IP address của bạn (ví dụ: 10.147.20.101)
+
+========================================
+BƯỚC 3: KIỂM TRA KẾT NỐI ĐẾN SERVER
+========================================
+
+3.1. Test ping đến Server:
+   - Mở Command Prompt
+   - Chạy: ping [Server ZeroTier IP]
+   - Ví dụ: ping 10.147.20.100
+   - Nếu ping được (có reply) → ZeroTier đang hoạt động tốt
+   - Nếu không ping được → Kiểm tra:
+     * ZeroTier đã được authorize chưa?
+     * Server đang chạy ZeroTier chưa?
+     * Cả 2 đều trong cùng network chưa?
+
+3.2. Test port RMI (tùy chọn):
+   - Mở PowerShell
+   - Chạy: Test-NetConnection -ComputerName [Server IP] -Port 1099
+   - Ví dụ: Test-NetConnection -ComputerName 10.147.20.100 -Port 1099
+   - Nếu "TcpTestSucceeded: True" → Port đang mở và server sẵn sàng
+
+========================================
+BƯỚC 4: CẤU HÌNH FIREWALL (NẾU CẦN)
+========================================
+
+4.1. Windows Firewall thường tự động cho phép ZeroTier
+   - Nhưng nếu gặp vấn đề, bạn có thể cần mở port cho RTP
+
+4.2. Mở port RTP (UDP) nếu cần:
+   - Mở Windows Defender Firewall
+   - Advanced settings → Inbound Rules → New Rule
+   - Port → UDP → Specific local ports: 6000-6010 (hoặc port bạn dùng)
+   - Allow the connection → Finish
+
+========================================
+BƯỚC 5: CHẠY CLIENT VỚI SERVER IP ZEROTIER
+========================================
+
+5.1. Cách 1: Sửa file START-CLIENT-*.bat
+   - Mở file START-CLIENT-1.bat (hoặc file client tương ứng)
+   - Tìm dòng có: --server localhost
+   - Thay thành: --server [Server ZeroTier IP]
+   - Ví dụ: --server 10.147.20.100
+   - Lưu file
+
+5.2. Cách 2: Chạy trực tiếp từ Command Prompt
+   - Mở Command Prompt
+   - cd "D:\Program Files\WorkSpace\rtp-av-conference"
+   - Chạy:
+     mvn -pl rtp-av-client exec:java -Dexec.mainClass=com.example.rtpav.client.ClientMain "-Dexec.args=--server 10.147.20.100 --name YourName --room demo --rtp 6000"
+   - Thay 10.147.20.100 bằng Server ZeroTier IP thực tế
+
+5.3. Cách 3: Nhập IP trong Login Dialog
+   - Chạy client bình thường
+   - Khi màn hình đăng nhập hiện ra
+   - Ở ô "Server", nhập Server ZeroTier IP (thay vì localhost)
+   - Ví dụ: 10.147.20.100
+   - Điền username, password, room như bình thường
+   - Click "Đăng nhập"
+
+========================================
+BƯỚC 6: XÁC NHẬN KẾT NỐI THÀNH CÔNG
+========================================
+
+6.1. Sau khi đăng nhập thành công:
+   - Bạn sẽ thấy trong chat: "RMI connected to [Server IP]:1099"
+   - Bạn sẽ thấy: "Joined room [room name]"
+   - Nếu thấy các message này → Kết nối thành công!
+
+6.2. Kiểm tra video/audio:
+   - Bật camera và microphone
+   - Nếu thấy video của mình và nghe được audio → Hoàn toàn thành công!
+
+========================================
+BƯỚC 7: TẠO SCRIPT CLIENT CHO ZEROTIER
+========================================
+
+7.1. Tạo file mới: START-CLIENT-ZEROTIER.bat
+   - Copy nội dung từ START-CLIENT-1.bat
+   - Sửa dòng --server localhost thành --server [Server ZeroTier IP]
+   - Ví dụ:
+     ```
+     @echo off
+     title RTP AV Conference - CLIENT (ZeroTier)
+     color 0B
+     cls
+     echo.
+     echo ========================================
+     echo   RTP AV Conference - CLIENT (ZeroTier)
+     echo   Server: 10.147.20.100
+     echo ========================================
+     echo.
+     cd /d "%~dp0"
+     
+     set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21.0.8.9-hotspot
+     set MAVEN_PATH=%USERPROFILE%\apache-maven-3.9.6\bin\mvn.cmd
+     
+     call "%MAVEN_PATH%" -pl rtp-av-client exec:java -Dexec.mainClass=com.example.rtpav.client.ClientMain "-Dexec.args=--server 10.147.20.100 --name YourName --room demo --rtp 6000"
+     pause
+     ```
+   - Thay 10.147.20.100 bằng Server ZeroTier IP thực tế
+   - Lưu file
+
+7.2. Chạy script:
+   - Double-click START-CLIENT-ZEROTIER.bat
+   - Client sẽ tự động kết nối đến server qua ZeroTier
+
+========================================
+BƯỚC 8: XỬ LÝ SỰ CỐ
+========================================
+
+8.1. Lỗi "Connection refused" hoặc "Connection timeout":
+   - Kiểm tra ZeroTier đang chạy: icon ở system tray phải có dấu ✓
+   - Kiểm tra bạn đã được authorize trong ZeroTier Central
+   - Kiểm tra Server IP đúng chưa
+   - Test ping đến Server: ping [Server IP]
+   - Kiểm tra Server đang chạy chưa
+
+8.2. Lỗi "UnknownHostException":
+   - Đảm bảo nhập đúng Server ZeroTier IP (không phải hostname)
+   - Thử dùng IP thay vì tên
+
+8.3. Kết nối được nhưng không thấy video/audio:
+   - Kiểm tra Firewall đã mở port UDP cho RTP chưa
+   - Kiểm tra camera/microphone đã được cấp quyền chưa
+   - Kiểm tra Server đang forward RTP packets
+
+8.4. ZeroTier không kết nối:
+   - Click chuột phải icon ZeroTier → "Show Networks"
+   - Phải thấy "Status: OK" và có IP address
+   - Nếu "Status: REQUESTING_CONFIG" → Chưa được authorize
+   - Nếu "Status: ACCESS_DENIED" → Cần được authorize trong ZeroTier Central
+
+8.5. Kiểm tra ZeroTier network:
+   - Đảm bảo cả Server và Client đều trong cùng một Network ID
+   - Đảm bảo cả 2 đều được authorize (có dấu ✓ trong ZeroTier Central)
+
+========================================
+LƯU Ý QUAN TRỌNG
+========================================
+
+1. Client PHẢI tham gia cùng ZeroTier Network với Server
+2. Client PHẢI được authorize trong ZeroTier Central
+3. Server IP là ZeroTier IP, KHÔNG phải localhost hoặc LAN IP
+4. ZeroTier phải chạy trước khi chạy client
+5. Nếu Server IP thay đổi, cần cập nhật lại trong client
+
+========================================
+TÓM TẮT CÁC BƯỚC
+========================================
+
+✓ Cài đặt ZeroTier One
+✓ Tham gia ZeroTier Network (nhận Network ID từ Server)
+✓ Được authorize trong ZeroTier Central (Server làm)
+✓ Kiểm tra ping đến Server
+✓ Chạy client với Server ZeroTier IP (thay vì localhost)
+✓ Đăng nhập và kiểm tra kết nối
+
+========================================
+VÍ DỤ ĐẦY ĐỦ
+========================================
+
+Giả sử Server cung cấp:
+- Network ID: a0b1c2d3e4f5g6h7
+- Server IP: 10.147.20.100
+- RMI Port: 1099
+- RTP Port: 5004
+
+Các bước:
+1. Cài ZeroTier → Join Network: a0b1c2d3e4f5g6h7
+2. Đợi Server authorize bạn
+3. Kiểm tra: ping 10.147.20.100
+4. Chạy client với: --server 10.147.20.100
+5. Đăng nhập bình thường
+
+========================================
+
