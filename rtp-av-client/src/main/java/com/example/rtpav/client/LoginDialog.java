@@ -40,9 +40,11 @@ public class LoginDialog extends JDialog {
     private String room;
     private String server;
     private ConferenceService conferenceService;
+    private String defaultServer;
     
     public LoginDialog(Frame parent, String defaultServer) {
         super(parent, "Đăng nhập", true);
+        this.defaultServer = defaultServer != null && !defaultServer.isEmpty() ? defaultServer : "localhost";
         
         setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         getContentPane().setBackground(BG_PRIMARY);
@@ -130,7 +132,7 @@ public class LoginDialog extends JDialog {
         panel.add(serverLabel, gbc);
         
         gbc.gridy = 7;
-        loginServerField = new JTextField("localhost", 25);
+        loginServerField = new JTextField(defaultServer, 25);
         styleTextField(loginServerField);
         panel.add(loginServerField, gbc);
         
@@ -237,7 +239,7 @@ public class LoginDialog extends JDialog {
         panel.add(serverLabel, gbc);
         
         gbc.gridy = 11;
-        registerServerField = new JTextField("localhost", 25);
+        registerServerField = new JTextField(defaultServer, 25);
         styleTextField(registerServerField);
         panel.add(registerServerField, gbc);
         
@@ -317,6 +319,14 @@ public class LoginDialog extends JDialog {
         String room = loginRoomField.getText().trim();
         String server = loginServerField.getText().trim();
         
+        // Nếu server field trống hoặc là "localhost", dùng defaultServer từ command line
+        if (server.isEmpty() || server.equalsIgnoreCase("localhost") || server.equals("127.0.0.1")) {
+            server = defaultServer;
+            System.out.println("[LOGIN] Server field is empty/localhost, using default from command line: " + server);
+        }
+        
+        System.out.println("[LOGIN] Using server IP: " + server);
+        
         if (username.isEmpty()) {
             showError("Vui lòng nhập tên đăng nhập!");
             loginUsernameField.requestFocus();
@@ -346,8 +356,11 @@ public class LoginDialog extends JDialog {
             try {
                 // Connect to RMI
                 int rmiPort = 1099;
+                System.out.println("[LOGIN] Attempting to connect to server: " + finalServer + ":" + rmiPort);
                 var reg = LocateRegistry.getRegistry(finalServer, rmiPort);
+                System.out.println("[LOGIN] RMI Registry located, looking up service...");
                 ConferenceService svc = (ConferenceService) reg.lookup("conference");
+                System.out.println("[LOGIN] Service found, calling login API...");
                 
                 // Call login API
                 String displayName = svc.login(username, password);
@@ -392,6 +405,14 @@ public class LoginDialog extends JDialog {
         String email = registerEmailField.getText().trim();
         String room = registerRoomField.getText().trim();
         String server = registerServerField.getText().trim();
+        
+        // Nếu server field trống hoặc là "localhost", dùng defaultServer từ command line
+        if (server.isEmpty() || server.equalsIgnoreCase("localhost") || server.equals("127.0.0.1")) {
+            server = defaultServer;
+            System.out.println("[REGISTER] Server field is empty/localhost, using default from command line: " + server);
+        }
+        
+        System.out.println("[REGISTER] Using server IP: " + server);
         
         if (username.isEmpty()) {
             showError("Vui lòng nhập tên đăng nhập!");

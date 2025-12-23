@@ -1,0 +1,174 @@
+========================================
+HƯỚNG DẪN SỬA LỖI CLIENT - ĐẢM BẢO 100% THÀNH CÔNG
+========================================
+
+VẤN ĐỀ: Client hiển thị IP đúng (172.24.23.39) nhưng vẫn kết nối đến IP sai (172.30.224.1)
+
+NGUYÊN NHÂN: Client chưa rebuild với code mới, hoặc có file .class cũ trong target/
+
+========================================
+BƯỚC 1: XÓA HOÀN TOÀN THƯ MỤC TARGET (QUAN TRỌNG!)
+========================================
+
+1.1. Mở File Explorer trên máy CLIENT
+1.2. Đi đến thư mục project: D:\Program Files\WorkSpace\rtp-av-conference (hoặc đường dẫn của bạn)
+1.3. XÓA các thư mục target sau (nếu có):
+    - rtp-av-client\target\
+    - rtp-av-server\target\
+    - rtp-rmi-common\target\
+    
+    Cách xóa:
+    - Click phải vào thư mục target → Delete
+    - Hoặc dùng Command Prompt:
+      rmdir /s /q rtp-av-client\target
+      rmdir /s /q rtp-av-server\target
+      rmdir /s /q rtp-rmi-common\target
+
+✅ Mục đích: Xóa hoàn toàn file .class cũ để đảm bảo rebuild từ đầu
+
+========================================
+BƯỚC 2: KIỂM TRA FILE CODE ĐÃ ĐÚNG CHƯA
+========================================
+
+2.1. Mở file: rtp-av-client\src\main\java\com\example\rtpav\client\LoginDialog.java
+
+2.2. Tìm hàm performLogin() (khoảng dòng 316-328)
+
+2.3. PHẢI THẤY đoạn code sau:
+    ```java
+    String server = loginServerField.getText().trim();
+    
+    // Nếu server field trống hoặc là "localhost", dùng defaultServer từ command line
+    if (server.isEmpty() || server.equalsIgnoreCase("localhost") || server.equals("127.0.0.1")) {
+        server = defaultServer;
+        System.out.println("[LOGIN] Server field is empty/localhost, using default from command line: " + server);
+    }
+    
+    System.out.println("[LOGIN] Using server IP: " + server);
+    ```
+
+2.4. Nếu KHÔNG THẤY → Copy đoạn code trên và thay thế phần tương ứng
+
+2.5. Tìm hàm performRegister() (khoảng dòng 388-410)
+
+2.6. PHẢI THẤY đoạn code tương tự (cũng có check localhost và dùng defaultServer)
+
+✅ Mục đích: Đảm bảo code đã được sửa đúng
+
+========================================
+BƯỚC 3: REBUILD PROJECT (BẮT BUỘC!)
+========================================
+
+3.1. Mở Command Prompt hoặc PowerShell trên máy CLIENT
+
+3.2. Đi đến thư mục project:
+    cd "D:\Program Files\WorkSpace\rtp-av-conference"
+
+3.3. Chạy REBUILD-ALL.bat:
+    REBUILD-ALL.bat
+    
+    HOẶC chạy trực tiếp Maven:
+    mvn clean install
+
+3.4. ĐỢI đến khi thấy:
+    [INFO] BUILD SUCCESS
+    
+3.5. Nếu thấy BUILD FAILURE → Gửi lỗi để xử lý
+
+✅ Mục đích: Compile lại code mới thành file .class mới
+
+========================================
+BƯỚC 4: KIỂM TRA FILE START-CLIENT-1.bat
+========================================
+
+4.1. Mở file START-CLIENT-1.bat trên máy CLIENT
+
+4.2. PHẢI THẤY:
+    ```batch
+    set JAVA_HOME=C:\Program Files\Java\jdk-21
+    set MAVEN_PATH=D:\java_mvc\apache-maven-3.9.12\bin\mvn.cmd
+    
+    call "%MAVEN_PATH%" -pl rtp-av-client exec:java -Dexec.mainClass=com.example.rtpav.client.ClientMain "-Dexec.args=--server 172.24.23.39 --name Alice --room demo --rtp 6000"
+    ```
+
+4.3. Đảm bảo:
+    - JAVA_HOME đúng đường dẫn Java trên máy client
+    - MAVEN_PATH đúng đường dẫn Maven trên máy client
+    - IP server: 172.24.23.39 (hoặc IP ZeroTier thực tế của server)
+
+✅ Mục đích: Đảm bảo script chạy đúng với đường dẫn và IP đúng
+
+========================================
+BƯỚC 5: CHẠY CLIENT VÀ KIỂM TRA LOG
+========================================
+
+5.1. Chạy START-CLIENT-1.bat trên máy CLIENT
+
+5.2. Mở Command Prompt/PowerShell để xem log (không đóng cửa sổ client)
+
+5.3. Khi form đăng nhập hiện ra, PHẢI THẤY trong console:
+    [LOGIN] Using server IP: 172.24.23.39
+    
+    Nếu thấy IP khác → Code chưa được rebuild đúng
+
+5.4. Nhập thông tin đăng nhập:
+    - Username: admin (hoặc user đã đăng ký)
+    - Password: admin123
+    - Room: demo
+    - Server: 172.24.23.39 (phải hiển thị sẵn)
+
+5.5. Click "Đăng nhập"
+
+5.6. Trong console PHẢI THẤY:
+    [LOGIN] Attempting to connect to server: 172.24.23.39:1099
+    [LOGIN] RMI Registry located, looking up service...
+    
+    Nếu thấy IP 172.30.224.1 → Client vẫn dùng code cũ, cần rebuild lại
+
+✅ Mục đích: Xác nhận client đang dùng đúng IP
+
+========================================
+BƯỚC 6: XỬ LÝ NẾU VẪN LỖI
+========================================
+
+6.1. Nếu vẫn thấy IP 172.30.224.1 trong log:
+    → Xóa lại thư mục target (Bước 1)
+    → Rebuild lại (Bước 3)
+    → Kiểm tra lại log (Bước 5)
+
+6.2. Nếu thấy "Connection refused" với IP đúng (172.24.23.39):
+    → Kiểm tra server đang chạy chưa
+    → Kiểm tra server đã rebuild với code mới chưa
+    → Test: ping 172.24.23.39 (phải ping được)
+    → Test: Test-NetConnection -ComputerName 172.24.23.39 -Port 1099
+
+6.3. Nếu BUILD FAILURE:
+    → Kiểm tra Java version: java -version (phải là Java 21)
+    → Kiểm tra Maven: mvn --version
+    → Gửi lỗi cụ thể để xử lý
+
+========================================
+KIỂM TRA CUỐI CÙNG
+========================================
+
+✅ Đã xóa thư mục target
+✅ Code LoginDialog.java đã có check localhost và dùng defaultServer
+✅ Đã rebuild với BUILD SUCCESS
+✅ START-CLIENT-1.bat có đúng IP và đường dẫn
+✅ Console log hiển thị đúng IP (172.24.23.39)
+✅ Server đang chạy và lắng nghe trên 0.0.0.0:1099
+
+Nếu tất cả đều ✅ → Client sẽ kết nối thành công!
+
+========================================
+LƯU Ý QUAN TRỌNG
+========================================
+
+1. PHẢI xóa thư mục target trước khi rebuild
+2. PHẢI đợi BUILD SUCCESS mới chạy client
+3. PHẢI kiểm tra console log để xác nhận IP đúng
+4. Server phải đang chạy và đã rebuild với code mới
+5. ZeroTier phải đang kết nối trên cả 2 máy
+
+========================================
+
