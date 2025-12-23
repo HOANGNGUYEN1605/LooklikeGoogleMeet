@@ -1,0 +1,99 @@
+========================================
+HƯỚNG DẪN SAU KHI BẬT MÁY LẠI
+========================================
+
+Sau khi tắt máy và bật lại, làm theo các bước sau:
+
+BƯỚC 1: MỞ DOCKER DESKTOP
+-------------------------
+1. Tìm và mở "Docker Desktop" từ Start Menu
+2. Đợi Docker khởi động hoàn toàn (icon Docker ở system tray không còn loading)
+3. Thường mất 30-60 giây
+
+BƯỚC 2: KIỂM TRA VÀ KHỞI ĐỘNG MYSQL CONTAINER
+---------------------------------------------
+Mở Command Prompt hoặc PowerShell và chạy:
+
+    cd "D:\Program Files\WorkSpace\rtp-av-conference\database"
+    docker start rtp-mysql
+
+Hoặc dùng script tự động:
+    cd "D:\Program Files\WorkSpace\rtp-av-conference"
+    SETUP-AFTER-RESTART.bat
+
+BƯỚC 3: CHẠY SERVER
+--------------------
+Mở Command Prompt mới và chạy:
+
+    cd "D:\Program Files\WorkSpace\rtp-av-conference"
+    START-SERVER.bat
+
+Đợi đến khi thấy dòng "RMI ready" trong console.
+
+BƯỚC 4: CHẠY CLIENT
+--------------------
+Mở Command Prompt mới và chạy:
+
+    cd "D:\Program Files\WorkSpace\rtp-av-conference"
+    START-CLIENT-1.bat
+
+Hoặc chạy nhiều client:
+    START-ALL-6-CLIENTS.bat
+
+BƯỚC 5: ĐĂNG NHẬP
+------------------
+- Username: admin
+- Password: admin123
+- Room: demo
+- Server: localhost
+
+========================================
+CÁCH NHANH NHẤT (DÙNG SCRIPT TỰ ĐỘNG)
+========================================
+
+Chỉ cần chạy 1 lệnh:
+
+    cd "D:\Program Files\WorkSpace\rtp-av-conference"
+    SETUP-AFTER-RESTART.bat
+
+Script sẽ tự động:
+✓ Kiểm tra Docker
+✓ Khởi động MySQL container
+✓ Kiểm tra Java và Maven
+✓ Hướng dẫn các bước tiếp theo
+
+Sau đó chạy:
+    START-SERVER.bat
+
+Và:
+    START-CLIENT-1.bat
+
+========================================
+LƯU Ý QUAN TRỌNG
+========================================
+
+1. Docker Desktop PHẢI chạy trước khi chạy bất kỳ lệnh nào
+2. MySQL container có thể cần vài giây để khởi động hoàn toàn
+3. Server PHẢI chạy trước khi chạy client
+4. Nếu gặp lỗi database, chạy:
+   cd database
+   fix-database-connection.bat
+
+========================================
+KIỂM TRA NHANH
+========================================
+
+Kiểm tra Docker đang chạy:
+    docker ps
+
+Kiểm tra MySQL container:
+    docker ps | findstr rtp-mysql
+
+Nếu container không chạy:
+    docker start rtp-mysql
+
+Kiểm tra MySQL đã sẵn sàng:
+    docker exec rtp-mysql mysqladmin ping -h localhost
+
+========================================
+
