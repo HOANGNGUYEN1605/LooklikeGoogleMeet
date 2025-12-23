@@ -1,0 +1,156 @@
+========================================
+HƯỚNG DẪN KẾT NỐI QUA MẠNG LAN
+========================================
+
+BƯỚC 1: TÌM IP LAN CỦA SERVER
+========================================
+
+1.1. Trên máy SERVER, chạy: TIM-IP-LAN.bat
+    - Hoặc mở Command Prompt và chạy:
+      ipconfig | findstr "IPv4"
+    
+1.2. Tìm IP LAN (thường là 192.168.x.x hoặc 10.x.x.x)
+    - BỎ QUA các IP:
+      * 172.24.x.x (ZeroTier)
+      * 172.30.x.x (VirtualBox/VMware)
+      * 192.168.56.x (VirtualBox Host-Only)
+      * 169.254.x.x (Auto IP)
+    
+1.3. Ghi lại IP LAN của SERVER
+    Ví dụ: 192.168.1.100 hoặc 172.20.10.5
+
+✅ Kết quả: Bạn có IP LAN của SERVER
+
+========================================
+BƯỚC 2: CẬP NHẬT IP TRONG START-CLIENT-1.bat
+========================================
+
+2.1. Mở file START-CLIENT-1.bat trên máy CLIENT
+
+2.2. Tìm dòng:
+    set SERVER_IP=172.20.10.5
+
+2.3. Thay IP bằng IP LAN của SERVER (từ Bước 1)
+
+2.4. Lưu file
+
+✅ Kết quả: Client đã được cấu hình với IP LAN của server
+
+========================================
+BƯỚC 3: ĐẢM BẢO CẢ 2 MÁY CÙNG MẠNG LAN
+========================================
+
+3.1. Kiểm tra cả 2 máy đều kết nối cùng WiFi/Router
+    - Server: Kết nối WiFi hoặc Ethernet
+    - Client: Kết nối WiFi hoặc Ethernet
+    - Cả 2 phải cùng một mạng
+
+3.2. Test ping từ CLIENT đến SERVER:
+    ping [IP LAN của SERVER]
+    
+    Ví dụ: ping 172.20.10.5
+    
+    Nếu ping được → Cùng mạng LAN ✅
+    Nếu không ping được → Kiểm tra lại kết nối mạng
+
+✅ Kết quả: Xác nhận cả 2 máy cùng mạng LAN
+
+========================================
+BƯỚC 4: KIỂM TRA SERVER ĐANG CHẠY
+========================================
+
+4.1. Trên máy SERVER, chạy: START-SERVER.bat
+
+4.2. Đợi đến khi thấy:
+    [SERVER] RMI ready (registry=1099, service=2099), RTP UDP=5004
+    [SERVER] RMI is listening on all interfaces (0.0.0.0)
+
+4.3. Kiểm tra server đang lắng nghe:
+    netstat -an | findstr "1099"
+    
+    Phải thấy: TCP    0.0.0.0:1099    0.0.0.0:0    LISTENING
+
+✅ Kết quả: Server đang chạy và sẵn sàng nhận kết nối
+
+========================================
+BƯỚC 5: TEST KẾT NỐI TỪ CLIENT
+========================================
+
+5.1. Trên máy CLIENT, mở PowerShell
+
+5.2. Test port RMI:
+    Test-NetConnection -ComputerName [IP LAN của SERVER] -Port 1099
+    
+    Ví dụ: Test-NetConnection -ComputerName 172.20.10.5 -Port 1099
+    
+    Phải thấy: TcpTestSucceeded : True
+
+5.3. Nếu TcpTestSucceeded : False:
+    → Kiểm tra Firewall trên SERVER
+    → Kiểm tra Server đang chạy chưa
+    → Kiểm tra cả 2 máy cùng mạng chưa
+
+✅ Kết quả: Xác nhận client có thể kết nối đến server
+
+========================================
+BƯỚC 6: CHẠY CLIENT
+========================================
+
+6.1. Trên máy CLIENT, chạy: START-CLIENT-1.bat
+
+6.2. Trong form đăng nhập:
+    - Server: Phải hiển thị IP LAN của server (ví dụ: 172.20.10.5)
+    - Username: admin
+    - Password: admin123
+    - Room: demo
+
+6.3. Click "Đăng nhập"
+
+6.4. Nếu thành công → Kết nối LAN hoạt động! ✅
+
+========================================
+XỬ LÝ SỰ CỐ
+========================================
+
+Vấn đề 1: Client không ping được server
+   → Kiểm tra cả 2 máy cùng WiFi/Router chưa
+   → Kiểm tra Firewall có chặn ping không
+   → Thử tắt Firewall tạm thời để test
+
+Vấn đề 2: TcpTestSucceeded : False
+   → Mở Windows Firewall trên SERVER
+   → Advanced settings → Inbound Rules
+   → New Rule → Port → TCP → 1099, 2099, 5004
+   → Allow connection → Finish
+
+Vấn đề 3: Client vẫn kết nối đến IP cũ
+   → Chạy FIX-CLIENT-100-PERCENT.bat trên CLIENT
+   → Rebuild lại project
+   → Chạy lại START-CLIENT-1.bat
+
+Vấn đề 4: Server không lắng nghe trên 0.0.0.0
+   → Rebuild server: REBUILD-ALL.bat
+   → Khởi động lại server: START-SERVER.bat
+   → Kiểm tra lại: netstat -an | findstr "1099"
+
+========================================
+LƯU Ý QUAN TRỌNG
+========================================
+
+1. KHÔNG cần ZeroTier nữa khi dùng LAN
+2. Cả 2 máy PHẢI cùng một mạng WiFi/Router
+3. Firewall có thể chặn kết nối, cần mở port 1099, 2099, 5004
+4. IP LAN có thể thay đổi nếu đổi WiFi
+5. Server phải bind vào 0.0.0.0 (đã sửa trong code)
+
+========================================
+THÔNG TIN CẦN GHI NHỚ
+========================================
+
+Server IP LAN: _______________________
+Client IP LAN: _______________________
+RMI Port: 1099
+RTP Port: 5004
+
+========================================
+
