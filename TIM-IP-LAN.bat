@@ -26,3 +26,4 @@ echo Vi du: Neu thay "192.168.1.100" -> Su dung IP nay
 echo.
 pause
 
+

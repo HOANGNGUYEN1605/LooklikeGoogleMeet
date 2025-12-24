@@ -140,8 +140,51 @@ if %errorlevel% neq 0 (
     echo.
 )
 
+REM Kiểm tra và mở Firewall Ports
+echo [Step 6] Kiểm tra Firewall Ports...
+echo.
+echo Đang kiểm tra firewall rules cho RTP AV Conference...
+netsh advfirewall firewall show rule name="RTP AV Conference - RMI Registry (1099)" >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo [WARNING] Firewall ports chưa được mở!
+    echo [WARNING] Cần mở các port: 1099, 2099 (TCP) và 5004 (UDP)
+    echo.
+    echo Bạn có muốn mở firewall ports ngay bây giờ không?
+    echo [CHU Y] Can chay voi quyen Administrator!
+    echo.
+    set /p OPEN_FW="Mở firewall ports? (Y/N): "
+    if /i "!OPEN_FW!"=="Y" (
+        echo.
+        echo Đang mở firewall ports...
+        echo [CHU Y] Neu hien loi, vui long chay MO-FIREWALL-PORTS.bat voi quyen Administrator!
+        echo.
+        REM Thử mở ports (cần quyền admin)
+        netsh advfirewall firewall delete rule name="RTP AV Conference - RMI Registry (1099)" >nul 2>&1
+        netsh advfirewall firewall add rule name="RTP AV Conference - RMI Registry (1099)" dir=in action=allow protocol=TCP localport=1099 >nul 2>&1
+        
+        netsh advfirewall firewall delete rule name="RTP AV Conference - RMI Service (2099)" >nul 2>&1
+        netsh advfirewall firewall add rule name="RTP AV Conference - RMI Service (2099)" dir=in action=allow protocol=TCP localport=2099 >nul 2>&1
+        
+        netsh advfirewall firewall delete rule name="RTP AV Conference - RTP Audio/Video (5004)" >nul 2>&1
+        netsh advfirewall firewall add rule name="RTP AV Conference - RTP Audio/Video (5004)" dir=in action=allow protocol=UDP localport=5004 >nul 2>&1
+        
+        echo [INFO] Da thu mo firewall ports!
+        echo [INFO] Neu khong thanh cong, chay MO-FIREWALL-PORTS.bat voi quyen Administrator.
+        echo.
+    ) else (
+        echo Bỏ qua mở firewall ports.
+        echo [CHU Y] Nho chay MO-FIREWALL-PORTS.bat voi quyen Administrator sau!
+        echo.
+    )
+) else (
+    echo Firewall ports da duoc mo!
+    echo [INFO] Cac ports: 1099, 2099 (TCP) va 5004 (UDP) da duoc mo.
+    echo.
+)
+
 REM Hỏi có muốn rebuild không
-echo [Step 6] Rebuild project?
+echo [Step 7] Rebuild project?
 echo.
 set /p REBUILD="Bạn có muốn rebuild project không? (Y/N): "
 if /i "!REBUILD!"=="Y" (
@@ -162,6 +205,10 @@ echo Bạn có thể:
 echo   1. Chạy server: START-SERVER.bat
 echo   2. Chạy client: START-CLIENT-1.bat (hoặc các client khác)
 echo.
+echo [CHU Y] Neu chua mo firewall ports:
+echo   - Chay MO-FIREWALL-PORTS.bat voi quyen Administrator
+echo   - Hoac chay KIEM-TRA-FIREWALL-PORTS.bat de kiem tra
+echo.
 echo Database đã sẵn sàng:
 echo   - Host: localhost
 echo   - Port: 3306
@@ -174,6 +221,7 @@ echo   - Username: admin
 echo   - Password: admin123
 echo.
 pause
+
 
 
 

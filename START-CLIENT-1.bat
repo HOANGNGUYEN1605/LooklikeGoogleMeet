@@ -18,7 +18,7 @@ REM CONFIGURATION - THAY DOI IP SERVER O DAY
 REM ========================================
 REM Thay IP ben duoi bang IP LAN thuc te cua SERVER
 REM Chay TIM-IP-LAN.bat tren may SERVER de tim IP
-set SERVER_IP=172.20.10.5
+set SERVER_IP=192.168.50.129
 
 call "%MAVEN_PATH%" -pl rtp-av-client exec:java -Dexec.mainClass=com.example.rtpav.client.ClientMain "-Dexec.args=--server %SERVER_IP% --name Alice --room demo --rtp 6000"
 pause

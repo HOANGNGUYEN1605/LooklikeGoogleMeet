@@ -1,59 +1,103 @@
 @echo off
 chcp 65001 >nul
+title Quick Start - RTP AV Conference Server
+color 0A
+cls
+echo.
 echo ========================================
-echo Quick Start - Khởi động nhanh
+echo   QUICK START - KHOI DONG NHANH
+echo   RTP AV Conference Server
 echo ========================================
 echo.
-echo Script này sẽ:
-echo   1. Kiểm tra và khởi động MySQL container
-echo   2. Khởi động server
-echo   3. Sẵn sàng để chạy client
+echo Script nay se:
+echo   1. Kiem tra Docker dang chay
+echo   2. Khoi dong MySQL container (neu can)
+echo   3. Khoi dong server
+echo   4. San sang de chay client
 echo.
+echo [CHU Y] Firewall ports da mo vi vien!
+echo [CHU Y] Khong can mo lai firewall nua!
+echo.
+pause
 
 REM Kiểm tra Docker
+echo [Step 1] Kiem tra Docker...
 docker ps >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ERROR: Docker không chạy!
-    echo Vui lòng mở Docker Desktop và chạy lại.
+    echo.
+    echo [ERROR] Docker khong chay!
+    echo [ERROR] Vui long mo Docker Desktop va cho no khoi dong xong!
+    echo.
+    echo [HUONG DAN]
+    echo   1. Mo Docker Desktop tu Start Menu
+    echo   2. Doi den khi thay "Docker Desktop is running"
+    echo   3. Chay lai script nay
+    echo.
     pause
     exit /b 1
 )
+echo [SUCCESS] Docker dang chay!
+echo.
 
 REM Kiểm tra và khởi động MySQL container
+echo [Step 2] Kiem tra MySQL container...
 docker ps | findstr "rtp-mysql" >nul
 if %errorlevel% neq 0 (
-    echo MySQL container không chạy. Đang khởi động...
+    echo [INFO] MySQL container khong chay. Dang khoi dong...
     docker start rtp-mysql >nul 2>&1
     if %errorlevel% neq 0 (
-        echo ERROR: Không thể khởi động MySQL container!
-        echo Vui lòng chạy: database\setup-docker-mysql.bat
+        echo.
+        echo [ERROR] Khong the khoi dong MySQL container!
+        echo [ERROR] Container co the chua duoc tao.
+        echo.
+        echo [HUONG DAN]
+        echo   Chay: database\setup-docker-mysql.bat
+        echo   (Chi can lam 1 lan dau tien)
+        echo.
         pause
         exit /b 1
     )
-    echo Đợi MySQL khởi động...
-    timeout /t 10 >nul
+    echo [INFO] Doi MySQL khoi dong (10 giay)...
+    timeout /t 10 /nobreak >nul
+    
+    REM Kiểm tra MySQL đã sẵn sàng chưa
+    :wait_mysql
+    docker exec rtp-mysql mysqladmin ping -h localhost --silent >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo [INFO] Dang doi MySQL...
+        timeout /t 3 /nobreak >nul
+        goto :wait_mysql
+    )
+    echo [SUCCESS] MySQL da san sang!
+) else (
+    echo [SUCCESS] MySQL container dang chay!
 )
-
-echo MySQL container đang chạy!
 echo.
 
 REM Khởi động server
-echo Đang khởi động server...
+echo [Step 3] Dang khoi dong server...
 echo.
 start "RTP AV Conference - SERVER" cmd /k "START-SERVER.bat"
 
 echo.
 echo ========================================
-echo Server đang khởi động!
+echo   [SUCCESS] Server dang khoi dong!
 echo ========================================
 echo.
-echo Đợi đến khi thấy "RMI ready" trong cửa sổ server.
-echo Sau đó bạn có thể chạy client bằng:
-echo   START-CLIENT-1.bat
-echo   START-CLIENT-2.bat
-echo   ... hoặc START-ALL-6-CLIENTS.bat
+echo [CHU Y] Doi den khi thay "RMI ready" trong cua so server!
+echo.
+echo [BƯỚC TIẾP THEO]
+echo   Sau khi server khoi dong xong, ban co the:
+echo   - Chay client: START-CLIENT-1.bat
+echo   - Hoac chay nhieu client: START-ALL-CLIENTS-MAY1.bat
+echo.
+echo [THÔNG TIN]
+echo   - Firewall ports: DA MO (vi vien)
+echo   - MySQL container: DANG CHAY
+echo   - Server: DANG KHOI DONG
 echo.
 pause
+
 
 
 

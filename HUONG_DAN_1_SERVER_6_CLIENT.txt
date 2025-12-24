@@ -1,0 +1,273 @@
+========================================
+HƯỚNG DẪN SETUP: 1 SERVER + 6 CLIENT QUA LAN
+========================================
+
+CẤU HÌNH:
+- Máy 1: 1 SERVER + 3 CLIENT (Alice, Bob, Charlie)
+- Máy 2: 3 CLIENT (David, Eve, Frank)
+- Tổng: 1 SERVER + 6 CLIENT trong cùng room "demo"
+
+========================================
+BƯỚC 1: TÌM IP LAN CỦA SERVER (MÁY 1)
+========================================
+
+1.1. Trên máy SERVER (Máy 1), chạy: TIM-IP-LAN.bat
+    - Hoặc mở Command Prompt và chạy:
+      ipconfig | findstr "IPv4"
+    
+1.2. Tìm IP LAN (thường là 192.168.x.x hoặc 10.x.x.x)
+    - BỎ QUA các IP:
+      * 172.24.x.x (ZeroTier)
+      * 172.30.x.x (VirtualBox/VMware)
+      * 192.168.56.x (VirtualBox Host-Only)
+      * 169.254.x.x (Auto IP)
+    
+1.3. Ghi lại IP LAN của SERVER
+    Ví dụ: 192.168.50.129
+
+✅ Kết quả: Bạn có IP LAN của SERVER
+
+========================================
+BƯỚC 2: CẬP NHẬT IP TRONG TẤT CẢ CLIENT SCRIPTS
+========================================
+
+2.1. Trên máy SERVER (Máy 1):
+    - Mở các file: START-CLIENT-1.bat, START-CLIENT-2.bat, START-CLIENT-3.bat
+    - Tìm dòng: set SERVER_IP=...
+    - Thay bằng IP LAN của SERVER (từ Bước 1)
+    - Lưu tất cả
+
+2.2. Trên máy CLIENT (Máy 2):
+    - Copy toàn bộ project sang máy 2 (hoặc clone từ GitHub)
+    - Mở các file: START-CLIENT-4.bat, START-CLIENT-5.bat, START-CLIENT-6.bat
+    - Tìm dòng: set SERVER_IP=...
+    - Thay bằng IP LAN của SERVER (từ Bước 1)
+    - Lưu tất cả
+
+✅ Kết quả: Tất cả client đã được cấu hình với IP LAN của server
+
+========================================
+BƯỚC 3: ĐẢM BẢO CẢ 2 MÁY CÙNG MẠNG LAN
+========================================
+
+3.1. Kiểm tra cả 2 máy đều kết nối cùng WiFi/Router
+    - Máy 1 (Server): Kết nối WiFi hoặc Ethernet
+    - Máy 2 (Client): Kết nối WiFi hoặc Ethernet
+    - Cả 2 phải cùng một mạng
+
+3.2. Test ping từ MÁY 2 đến MÁY 1:
+    ping [IP LAN của SERVER]
+    
+    Ví dụ: ping 192.168.50.129
+    
+    Nếu ping được → Cùng mạng LAN ✅
+    Nếu không ping được → Kiểm tra lại kết nối mạng
+
+✅ Kết quả: Xác nhận cả 2 máy cùng mạng LAN
+
+========================================
+BƯỚC 4: KIỂM TRA FIREWALL TRÊN MÁY SERVER
+========================================
+
+4.1. Trên máy SERVER (Máy 1), mở Windows Firewall:
+    - Windows Security → Firewall & network protection
+    - Advanced settings → Inbound Rules
+
+4.2. Tạo rule mới cho các port:
+    - Port 1099 (TCP) - RMI Registry
+    - Port 2099 (TCP) - RMI Service
+    - Port 5004 (UDP) - RTP Audio/Video
+    
+    Cách tạo:
+    - New Rule → Port → TCP → Specific local ports: 1099,2099
+    - Allow connection → Finish
+    - Lặp lại cho UDP port 5004
+
+✅ Kết quả: Firewall đã cho phép kết nối từ máy khác
+
+========================================
+BƯỚC 5: KHỞI ĐỘNG SERVER (MÁY 1)
+========================================
+
+5.1. Trên máy SERVER (Máy 1), chạy: START-SERVER.bat
+    - Hoặc chạy: START-ALL-CLIENTS-MAY1.bat (sẽ tự động chạy server + 3 client)
+
+5.2. Đợi đến khi thấy:
+    [SERVER] RMI ready (registry=1099, service=2099), RTP UDP=5004
+    [SERVER] RMI is listening on all interfaces (0.0.0.0)
+
+5.3. Kiểm tra server đang lắng nghe:
+    netstat -an | findstr "1099"
+    
+    Phải thấy: TCP    0.0.0.0:1099    0.0.0.0:0    LISTENING
+
+✅ Kết quả: Server đang chạy và sẵn sàng nhận kết nối
+
+========================================
+BƯỚC 6: TEST KẾT NỐI TỪ MÁY 2
+========================================
+
+6.1. Trên máy CLIENT (Máy 2), mở PowerShell
+
+6.2. Test port RMI:
+    Test-NetConnection -ComputerName [IP LAN của SERVER] -Port 1099
+    
+    Ví dụ: Test-NetConnection -ComputerName 192.168.50.129 -Port 1099
+    
+    Phải thấy: TcpTestSucceeded : True
+
+6.3. Nếu TcpTestSucceeded : False:
+    → Kiểm tra Firewall trên SERVER (Bước 4)
+    → Kiểm tra Server đang chạy chưa (Bước 5)
+    → Kiểm tra cả 2 máy cùng mạng chưa (Bước 3)
+
+✅ Kết quả: Xác nhận máy 2 có thể kết nối đến server
+
+========================================
+BƯỚC 7: KHỞI ĐỘNG CLIENTS TRÊN MÁY 1
+========================================
+
+7.1. Trên máy SERVER (Máy 1), chạy: START-ALL-CLIENTS-MAY1.bat
+    - Script này sẽ tự động mở:
+      * 1 cửa sổ SERVER
+      * 3 cửa sổ CLIENT (Alice, Bob, Charlie)
+
+7.2. Hoặc chạy từng client riêng:
+    - START-CLIENT-1.bat (Alice, Port 6000)
+    - START-CLIENT-2.bat (Bob, Port 6001)
+    - START-CLIENT-3.bat (Charlie, Port 6002)
+
+7.3. Trong form đăng nhập của mỗi client:
+    - Server: Phải hiển thị IP LAN của server
+    - Username: admin
+    - Password: admin123
+    - Room: demo
+
+7.4. Click "Đăng nhập" cho từng client
+
+✅ Kết quả: 3 client trên máy 1 đã join vào room "demo"
+
+========================================
+BƯỚC 8: KHỞI ĐỘNG CLIENTS TRÊN MÁY 2
+========================================
+
+8.1. Trên máy CLIENT (Máy 2), chạy: START-ALL-CLIENTS-MAY2.bat
+    - Script này sẽ tự động mở:
+      * 3 cửa sổ CLIENT (David, Eve, Frank)
+
+8.2. Hoặc chạy từng client riêng:
+    - START-CLIENT-4.bat (David, Port 6003)
+    - START-CLIENT-5.bat (Eve, Port 6004)
+    - START-CLIENT-6.bat (Frank, Port 6005)
+
+8.3. Trong form đăng nhập của mỗi client:
+    - Server: Phải hiển thị IP LAN của server (từ máy 1)
+    - Username: admin
+    - Password: admin123
+    - Room: demo
+
+8.4. Click "Đăng nhập" cho từng client
+
+✅ Kết quả: 3 client trên máy 2 đã join vào room "demo"
+
+========================================
+BƯỚC 9: KIỂM TRA TẤT CẢ 6 CLIENT ĐÃ JOIN
+========================================
+
+9.1. Trên bất kỳ client nào, kiểm tra danh sách peers:
+    - Phải thấy tất cả 6 client:
+      * Alice (Port 6000)
+      * Bob (Port 6001)
+      * Charlie (Port 6002)
+      * David (Port 6003)
+      * Eve (Port 6004)
+      * Frank (Port 6005)
+
+9.2. Test audio/video:
+    - Bật mic trên một client
+    - Các client khác phải nghe được
+    - Bật camera trên một client
+    - Các client khác phải thấy được
+
+✅ Kết quả: Tất cả 6 client đã kết nối thành công!
+
+========================================
+THÔNG TIN QUAN TRỌNG
+========================================
+
+CẤU HÌNH CLIENT:
+- Client 1 (Alice): Port 6000, Máy 1
+- Client 2 (Bob): Port 6001, Máy 1
+- Client 3 (Charlie): Port 6002, Máy 1
+- Client 4 (David): Port 6003, Máy 2
+- Client 5 (Eve): Port 6004, Máy 2
+- Client 6 (Frank): Port 6005, Máy 2
+
+ROOM: demo
+SERVER IP LAN: _______________________ (Ghi lại IP từ Bước 1)
+
+========================================
+XỬ LÝ SỰ CỐ
+========================================
+
+Vấn đề 1: Client trên máy 2 không ping được server
+   → Kiểm tra cả 2 máy cùng WiFi/Router chưa
+   → Kiểm tra Firewall có chặn ping không
+   → Thử tắt Firewall tạm thời để test
+
+Vấn đề 2: TcpTestSucceeded : False
+   → Mở Windows Firewall trên SERVER (Máy 1)
+   → Advanced settings → Inbound Rules
+   → New Rule → Port → TCP → 1099, 2099
+   → New Rule → Port → UDP → 5004
+   → Allow connection → Finish
+
+Vấn đề 3: Client vẫn kết nối đến IP cũ
+   → Kiểm tra lại SERVER_IP trong các START-CLIENT-*.bat
+   → Rebuild lại project: REBUILD-ALL.bat
+   → Chạy lại client
+
+Vấn đề 4: Server không lắng nghe trên 0.0.0.0
+   → Rebuild server: REBUILD-ALL.bat
+   → Khởi động lại server: START-SERVER.bat
+   → Kiểm tra lại: netstat -an | findstr "1099"
+
+Vấn đề 5: Client trên máy 2 không thấy các client trên máy 1
+   → Kiểm tra tất cả client đều join vào cùng room "demo"
+   → Kiểm tra server đang chạy
+   → Kiểm tra firewall đã mở port chưa
+
+Vấn đề 6: Audio/Video không hoạt động giữa 2 máy
+   → Kiểm tra firewall đã mở UDP port 5004 chưa
+   → Kiểm tra router có chặn UDP không
+   → Thử tắt firewall tạm thời để test
+
+========================================
+LƯU Ý QUAN TRỌNG
+========================================
+
+1. KHÔNG cần ZeroTier khi dùng LAN
+2. Cả 2 máy PHẢI cùng một mạng WiFi/Router
+3. Firewall có thể chặn kết nối, cần mở port 1099, 2099, 5004
+4. IP LAN có thể thay đổi nếu đổi WiFi → Cần cập nhật lại SERVER_IP
+5. Server phải bind vào 0.0.0.0 (đã sửa trong code)
+6. Mỗi client phải có port RTP khác nhau (6000-6005)
+7. Tất cả client phải join vào cùng room "demo"
+
+========================================
+QUY TRÌNH NHANH (SAU KHI ĐÃ SETUP LẦN ĐẦU)
+========================================
+
+MÁY 1 (SERVER + 3 CLIENT):
+1. Chạy: START-ALL-CLIENTS-MAY1.bat
+2. Đợi server khởi động xong
+3. Đăng nhập 3 client (Alice, Bob, Charlie) vào room "demo"
+
+MÁY 2 (3 CLIENT):
+1. Chạy: START-ALL-CLIENTS-MAY2.bat
+2. Đăng nhập 3 client (David, Eve, Frank) vào room "demo"
+
+✅ Xong! Tất cả 6 client đã join vào cùng room!
+
+========================================
+

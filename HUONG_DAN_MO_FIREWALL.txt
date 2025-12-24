@@ -1,0 +1,158 @@
+========================================
+HƯỚNG DẪN MỞ FIREWALL PORTS
+RTP AV Conference Server
+========================================
+
+MỤC ĐÍCH:
+- Mở các port cần thiết cho RTP AV Conference Server
+- Đảm bảo các port LUÔN MỞ (vĩnh viễn) ngay cả sau khi tắt máy và bật lại
+
+PORTS CẦN MỞ:
+- Port 1099 (TCP) - RMI Registry
+- Port 2099 (TCP) - RMI Service  
+- Port 5004 (UDP) - RTP Audio/Video
+
+========================================
+CÁCH 1: TỰ ĐỘNG (KHUYẾN NGHỊ)
+========================================
+
+1.1. Click chuột phải vào file: MO-FIREWALL-PORTS.bat
+1.2. Chọn "Run as administrator"
+1.3. Đợi script chạy xong
+1.4. Xác nhận thấy thông báo "[SUCCESS]"
+
+✅ Kết quả: Các ports đã được mở vĩnh viễn!
+
+========================================
+CÁCH 2: THỦ CÔNG (NẾU SCRIPT KHÔNG CHẠY)
+========================================
+
+2.1. Mở Windows Security:
+    - Windows + I → Update & Security → Windows Security
+    - Hoặc tìm "Windows Defender Firewall" trong Start Menu
+
+2.2. Mở Advanced Settings:
+    - Click "Firewall & network protection"
+    - Click "Advanced settings" (ở cuối trang)
+
+2.3. Tạo Inbound Rule cho Port 1099 (TCP):
+    - Click "Inbound Rules" (bên trái)
+    - Click "New Rule..." (bên phải)
+    - Chọn "Port" → Next
+    - Chọn "TCP" → "Specific local ports" → Nhập: 1099 → Next
+    - Chọn "Allow the connection" → Next
+    - Chọn tất cả (Domain, Private, Public) → Next
+    - Tên: "RTP AV Conference - RMI Registry (1099)" → Finish
+
+2.4. Tạo Inbound Rule cho Port 2099 (TCP):
+    - Lặp lại Bước 2.3
+    - Port: 2099
+    - Tên: "RTP AV Conference - RMI Service (2099)"
+
+2.5. Tạo Inbound Rule cho Port 5004 (UDP):
+    - Lặp lại Bước 2.3
+    - Chọn "UDP" thay vì "TCP"
+    - Port: 5004
+    - Tên: "RTP AV Conference - RTP Audio/Video (5004)"
+
+✅ Kết quả: Các ports đã được mở vĩnh viễn!
+
+========================================
+KIỂM TRA FIREWALL PORTS ĐÃ MỞ CHƯA
+========================================
+
+3.1. Chạy script: KIEM-TRA-FIREWALL-PORTS.bat
+    - Script này sẽ hiển thị tất cả firewall rules liên quan
+
+3.2. Hoặc chạy lệnh trong Command Prompt (Admin):
+    netsh advfirewall firewall show rule name=all | findstr "RTP AV"
+
+3.3. Phải thấy 3 rules:
+    - RTP AV Conference - RMI Registry (1099)
+    - RTP AV Conference - RMI Service (2099)
+    - RTP AV Conference - RTP Audio/Video (5004)
+
+✅ Nếu thấy 3 rules → Firewall ports đã được mở!
+
+========================================
+LƯU Ý QUAN TRỌNG
+========================================
+
+1. CẦN QUYỀN ADMINISTRATOR:
+   - Script MO-FIREWALL-PORTS.bat CẦN chạy với quyền Administrator
+   - Click chuột phải → "Run as administrator"
+
+2. VĨNH VIỄN:
+   - Các firewall rules này là VĨNH VIỄN
+   - Sau khi tắt máy và bật lại, các ports VẪN MỞ
+   - KHÔNG cần mở lại mỗi lần khởi động máy
+
+3. CHỈ CẦN MỞ 1 LẦN:
+   - Chỉ cần mở 1 lần duy nhất
+   - Sau đó có thể quên, các ports sẽ luôn mở
+
+4. CHỈ MỞ TRÊN MÁY SERVER:
+   - Chỉ cần mở firewall trên MÁY SERVER
+   - Máy CLIENT không cần mở firewall (chỉ kết nối ra ngoài)
+
+5. NẾU ĐỔI MÁY SERVER:
+   - Nếu chuyển server sang máy khác
+   - Cần mở firewall ports trên máy server mới
+
+========================================
+XỬ LÝ SỰ CỐ
+========================================
+
+Vấn đề 1: Script báo lỗi "Access Denied"
+   → Chạy Command Prompt với quyền Administrator
+   → Click chuột phải vào file → "Run as administrator"
+
+Vấn đề 2: Script chạy nhưng không mở được ports
+   → Kiểm tra Windows Firewall có bị tắt không
+   → Thử mở thủ công theo Cách 2
+
+Vấn đề 3: Sau khi mở ports, client vẫn không kết nối được
+   → Kiểm tra lại: KIEM-TRA-FIREWALL-PORTS.bat
+   → Kiểm tra server đang chạy chưa
+   → Kiểm tra cả 2 máy cùng mạng LAN chưa
+
+Vấn đề 4: Muốn đóng ports lại
+   → Mở Windows Firewall → Advanced settings
+   → Inbound Rules → Tìm rules "RTP AV Conference"
+   → Click chuột phải → Disable hoặc Delete
+
+========================================
+TỰ ĐỘNG MỞ KHI KHỞI ĐỘNG MÁY
+========================================
+
+Nếu muốn tự động mở firewall ports mỗi khi khởi động máy:
+
+1. Tạo Task Scheduler:
+   - Windows + R → taskschd.msc
+   - Create Basic Task
+   - Name: "Open RTP AV Conference Firewall Ports"
+   - Trigger: "When the computer starts"
+   - Action: "Start a program"
+   - Program: [Đường dẫn đến MO-FIREWALL-PORTS.bat]
+   - Check "Run with highest privileges"
+   - Finish
+
+2. Hoặc đơn giản hơn:
+   - Chạy MO-FIREWALL-PORTS.bat 1 lần
+   - Các rules là vĩnh viễn, không cần chạy lại!
+
+========================================
+THÔNG TIN CẦN GHI NHỚ
+========================================
+
+Ports đã mở:
+- 1099 (TCP) - RMI Registry
+- 2099 (TCP) - RMI Service
+- 5004 (UDP) - RTP Audio/Video
+
+Trạng thái: VĨNH VIỄN (không cần mở lại)
+
+Script kiểm tra: KIEM-TRA-FIREWALL-PORTS.bat
+
+========================================
+

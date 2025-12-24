@@ -1,0 +1,170 @@
+========================================
+HƯỚNG DẪN CẬP NHẬT IP SERVER TỰ ĐỘNG
+RTP AV Conference
+========================================
+
+MỤC ĐÍCH:
+- Tự động phát hiện IP LAN hiện tại của máy
+- Tự động cập nhật IP vào tất cả START-CLIENT-*.bat
+- Tiết kiệm thời gian khi đổi mạng (WiFi/Router)
+
+KHI NÀO CẦN CHẠY:
+- Mỗi khi đổi WiFi/Router
+- Mỗi khi IP LAN thay đổi
+- Sau khi kết nối vào mạng mới
+
+========================================
+CÁCH 1: SỬ DỤNG SCRIPT TỰ ĐỘNG (KHUYẾN NGHỊ)
+========================================
+
+1.1. Chạy script: CAP-NHAT-IP-SERVER-TU-DONG.bat
+    - Script sẽ tự động:
+      * Tìm IP LAN hiện tại
+      * Cập nhật vào tất cả START-CLIENT-*.bat
+      * Hiển thị kết quả
+
+1.2. Hoặc chạy: CAP-NHAT-IP-SERVER-PS.bat
+    - Phiên bản dùng PowerShell (chính xác hơn)
+    - Yêu cầu PowerShell có sẵn
+
+1.3. Kiểm tra kết quả:
+    - Script sẽ hiển thị IP mới và số file đã cập nhật
+    - Mở một file START-CLIENT-*.bat để xác nhận
+
+✅ Kết quả: Tất cả client scripts đã được cập nhật với IP mới!
+
+========================================
+CÁCH 2: THỦ CÔNG (NẾU SCRIPT KHÔNG CHẠY)
+========================================
+
+2.1. Tìm IP LAN hiện tại:
+    - Chạy: TIM-IP-LAN.bat
+    - Hoặc: ipconfig | findstr "IPv4"
+    - Ghi lại IP LAN (ví dụ: 192.168.1.100)
+
+2.2. Cập nhật IP trong các file:
+    - Mở từng file: START-CLIENT-1.bat, START-CLIENT-2.bat, ...
+    - Tìm dòng: set SERVER_IP=...
+    - Thay bằng IP mới: set SERVER_IP=192.168.1.100
+    - Lưu tất cả
+
+✅ Kết quả: Đã cập nhật IP thủ công!
+
+========================================
+KIỂM TRA IP ĐÃ ĐƯỢC CẬP NHẬT
+========================================
+
+3.1. Mở một file START-CLIENT-*.bat bất kỳ
+
+3.2. Tìm dòng:
+    set SERVER_IP=192.168.1.100
+    
+    (IP phải khớp với IP LAN hiện tại)
+
+3.3. Hoặc chạy lệnh:
+    findstr "set SERVER_IP=" START-CLIENT-*.bat
+    
+    Tất cả phải hiển thị cùng một IP
+
+✅ Nếu tất cả hiển thị cùng IP → Đã cập nhật thành công!
+
+========================================
+LƯU Ý QUAN TRỌNG
+========================================
+
+1. CHẠY TRƯỚC KHI CHẠY SERVER:
+   - Luôn chạy script cập nhật IP TRƯỚC khi chạy server
+   - Đảm bảo client scripts có IP đúng
+
+2. CẬP NHẬT TRÊN MÁY KHÁC:
+   - Nếu có máy client khác, cần cập nhật IP trên máy đó
+   - Copy IP mới và cập nhật vào START-CLIENT-*.bat trên máy client
+
+3. IP LAN CÓ THỂ THAY ĐỔI:
+   - Mỗi lần đổi WiFi → IP có thể thay đổi
+   - Mỗi lần kết nối router khác → IP có thể thay đổi
+   - Cần chạy script cập nhật IP mỗi lần đổi mạng
+
+4. TỰ ĐỘNG HÓA:
+   - Có thể thêm script vào Task Scheduler để tự động chạy khi đổi mạng
+   - Hoặc chạy thủ công mỗi khi cần
+
+========================================
+XỬ LÝ SỰ CỐ
+========================================
+
+Vấn đề 1: Script không tìm thấy IP LAN
+   → Kiểm tra máy đã kết nối WiFi/Router chưa
+   → Chạy: ipconfig để xem tất cả IP
+   → Chạy: TIM-IP-LAN.bat để tìm IP LAN
+
+Vấn đề 2: Script không cập nhật được file
+   → Kiểm tra file START-CLIENT-*.bat có bị khóa không
+   → Đóng tất cả editor đang mở các file này
+   → Chạy lại script
+
+Vấn đề 3: IP vẫn cũ sau khi cập nhật
+   → Kiểm tra lại file START-CLIENT-*.bat
+   → Đảm bảo script đã chạy xong
+   → Thử cập nhật thủ công
+
+Vấn đề 4: Client vẫn kết nối đến IP cũ
+   → Rebuild client: REBUILD-ALL.bat
+   → Chạy lại client: START-CLIENT-*.bat
+
+========================================
+QUY TRÌNH HOÀN CHỈNH SAU KHI ĐỔI MẠNG
+========================================
+
+1. Kết nối vào WiFi/Router mới
+
+2. Chạy: CAP-NHAT-IP-SERVER-TU-DONG.bat
+   → Cập nhật IP trong tất cả client scripts
+
+3. (Nếu có máy client khác) Cập nhật IP trên máy client:
+   - Copy IP mới từ máy server
+   - Cập nhật vào START-CLIENT-*.bat trên máy client
+
+4. Chạy server: QUICK-START.bat hoặc START-SERVER.bat
+
+5. Chạy client: START-CLIENT-*.bat
+
+✅ Xong! Tất cả đã được cập nhật với IP mới!
+
+========================================
+TỰ ĐỘNG HÓA VỚI TASK SCHEDULER
+========================================
+
+Nếu muốn tự động cập nhật IP khi đổi mạng:
+
+1. Mở Task Scheduler:
+   - Windows + R → taskschd.msc
+
+2. Create Basic Task:
+   - Name: "Update RTP AV Conference Server IP"
+   - Trigger: "When a specific event is logged"
+   - Hoặc: "When I log on" (chạy mỗi khi đăng nhập)
+
+3. Action:
+   - Start a program
+   - Program: [Đường dẫn đến CAP-NHAT-IP-SERVER-TU-DONG.bat]
+
+4. Settings:
+   - Check "Run whether user is logged on or not"
+   - Check "Run with highest privileges"
+
+✅ Script sẽ tự động chạy khi đổi mạng!
+
+========================================
+THÔNG TIN CẦN GHI NHỚ
+========================================
+
+Script cập nhật IP: CAP-NHAT-IP-SERVER-TU-DONG.bat
+Script tìm IP: TIM-IP-LAN.bat
+
+Khi nào chạy: Mỗi khi đổi mạng (WiFi/Router)
+
+Files được cập nhật: START-CLIENT-*.bat (tất cả)
+
+========================================
+
