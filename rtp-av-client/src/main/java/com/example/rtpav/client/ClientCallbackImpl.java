@@ -19,8 +19,13 @@ public class ClientCallbackImpl extends UnicastRemoteObject implements ClientCal
 
     @Override
     public void onPeersChanged(String roomId, Set<PeerInfo> peers) throws RemoteException {
+        System.out.println("[CLIENT] onPeersChanged callback received: room=" + roomId + ", peers=" + peers.size());
         ui.setPeers(peers);
-        ui.addChat("[SYSTEM]", "Peers = " + peers.size());
+        ui.setLastPeerCount(peers.size());
+        ui.addChat("[SYSTEM]", "Peers = " + peers.size() + " (via callback)");
+        for (var p : peers) {
+            System.out.println("[CLIENT]   Peer: SSRC=" + p.getSsrc() + ", name=" + p.getName() + ", endpoint=" + p.getRtpEndpoint());
+        }
     }
 
     @Override

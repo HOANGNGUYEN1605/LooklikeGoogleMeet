@@ -55,6 +55,9 @@ public class ClientUI extends JFrame {
     private final java.util.Map<Long, String> peerNames = new java.util.concurrent.ConcurrentHashMap<>();
     // Map để lưu reference đến peerLabel: SSRC -> JLabel
     private final java.util.Map<Long, JLabel> peerLabels = new java.util.concurrent.ConcurrentHashMap<>();
+    
+    // Track số peers để detect thay đổi
+    private volatile int lastPeerCount = 0;
 
     private final String name;
     private final String roomId;
@@ -64,6 +67,14 @@ public class ClientUI extends JFrame {
 
     private volatile boolean camOn = false;
     private volatile boolean micOn = false;
+    
+    public int getLastPeerCount() {
+        return lastPeerCount;
+    }
+    
+    public void setLastPeerCount(int count) {
+        this.lastPeerCount = count;
+    }
 
     public interface Hooks {
         void onToggleCamera(boolean on);
@@ -1119,7 +1130,10 @@ public class ClientUI extends JFrame {
     private void sendPublicChat() {
         String msg = publicChatBox.getText().trim();
         if (!msg.isEmpty()) {
-            publicChatBox.setText("");
+            publicChatBox.setText(""); // Clear ngay để không block UI
+            // Hiển thị message ngay trong UI (optimistic update)
+            addChat("Bạn", msg);
+            // Gửi trong background thread
             if (hooks != null) hooks.onSendChat(msg);
         }
     }
@@ -1149,37 +1163,48 @@ public class ClientUI extends JFrame {
                     return;
                 }
                 
-                try {
-                    // Đọc file và encode base64
-                    byte[] fileBytes = java.nio.file.Files.readAllBytes(selectedFile.toPath());
-                    String base64Data = java.util.Base64.getEncoder().encodeToString(fileBytes);
-                    String fileName = selectedFile.getName();
-                    
-                    // Tạo message với format đặc biệt: [FILE:base64data:filename]
-                    String fileMessage = "[FILE:" + base64Data + ":" + fileName + "]";
-                    
-                    // Gửi file
-                    if (isPublic) {
-                        if (hooks != null) hooks.onSendChat(fileMessage);
-                    } else {
-                        // Tìm SSRC từ textField (cần lưu SSRC trong ChatTab)
-                        // Tạm thời gửi như public chat
-                        if (hooks != null) hooks.onSendChat(fileMessage);
+                // Hiển thị thông báo đang xử lý
+                JOptionPane.showMessageDialog(this,
+                    "Đang xử lý file: " + selectedFile.getName() + "\nVui lòng đợi...",
+                    "Đang xử lý",
+                    JOptionPane.INFORMATION_MESSAGE);
+                
+                // Encode file trong background thread để không block UI
+                new Thread(() -> {
+                    try {
+                        // Đọc file và encode base64
+                        byte[] fileBytes = java.nio.file.Files.readAllBytes(selectedFile.toPath());
+                        String base64Data = java.util.Base64.getEncoder().encodeToString(fileBytes);
+                        String fileName = selectedFile.getName();
+                        
+                        // Tạo message với format đặc biệt: [FILE:base64data:filename]
+                        String fileMessage = "[FILE:" + base64Data + ":" + fileName + "]";
+                        
+                        // Gửi file trong UI thread
+                        SwingUtilities.invokeLater(() -> {
+                            if (isPublic) {
+                                if (hooks != null) hooks.onSendChat(fileMessage);
+                            } else {
+                                if (hooks != null) hooks.onSendChat(fileMessage);
+                            }
+                            
+                            // Hiển thị thông báo thành công
+                            JOptionPane.showMessageDialog(this,
+                                "Đã gửi file: " + fileName + "\nKích thước: " + 
+                                String.format("%.2f KB", fileSize / 1024.0),
+                                "Gửi file thành công",
+                                JOptionPane.INFORMATION_MESSAGE);
+                        });
+                    } catch (Exception e) {
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(this,
+                                "Lỗi khi đọc file: " + e.getMessage(),
+                                "Lỗi",
+                                JOptionPane.ERROR_MESSAGE);
+                        });
+                        e.printStackTrace();
                     }
-                    
-                    // Hiển thị thông báo
-                    JOptionPane.showMessageDialog(this,
-                        "Đang gửi file: " + fileName + "\nKích thước: " + 
-                        String.format("%.2f KB", fileSize / 1024.0),
-                        "Gửi file",
-                        JOptionPane.INFORMATION_MESSAGE);
-                } catch (Exception e) {
-                    JOptionPane.showMessageDialog(this,
-                        "Lỗi khi đọc file: " + e.getMessage(),
-                        "Lỗi",
-                        JOptionPane.ERROR_MESSAGE);
-                    e.printStackTrace();
-                }
+                }).start();
             }
         }
     }
@@ -1659,17 +1684,38 @@ public class ClientUI extends JFrame {
                 );
             }
             
-            // Append HTML message
+            // Append HTML message - tối ưu để không block
             try {
                 HTMLDocument doc = (HTMLDocument) publicChatArea.getDocument();
                 HTMLEditorKit kit = (HTMLEditorKit) publicChatArea.getEditorKit();
+                // Chỉ insert HTML nếu document không quá lớn (tránh lag)
+                int docLength = doc.getLength();
+                if (docLength > 50000) { // Nếu quá 50KB, clear một phần
+                    try {
+                        doc.remove(0, Math.min(10000, docLength / 2)); // Xóa nửa đầu
+                    } catch (Exception ignored) {}
+                }
                 kit.insertHTML(doc, doc.getLength(), htmlMessage, 0, 0, null);
-                publicChatArea.setCaretPosition(publicChatArea.getDocument().getLength());
+                // Scroll to bottom async để không block
+                SwingUtilities.invokeLater(() -> {
+                    try {
+                        publicChatArea.setCaretPosition(publicChatArea.getDocument().getLength());
+                    } catch (Exception ignored) {}
+                });
             } catch (Exception e) {
-                // Fallback nếu có lỗi với HTML
+                // Fallback nếu có lỗi với HTML - dùng plain text
                 String plainMessage = String.format("[%s] %s: %s\n", timestamp, from, msg);
-                publicChatArea.setText(publicChatArea.getText() + plainMessage);
-                publicChatArea.setCaretPosition(publicChatArea.getDocument().getLength());
+                String currentText = publicChatArea.getText();
+                // Giới hạn độ dài để tránh lag
+                if (currentText.length() > 50000) {
+                    currentText = currentText.substring(currentText.length() - 40000);
+                }
+                publicChatArea.setText(currentText + plainMessage);
+                SwingUtilities.invokeLater(() -> {
+                    try {
+                        publicChatArea.setCaretPosition(publicChatArea.getDocument().getLength());
+                    } catch (Exception ignored) {}
+                });
             }
         });
     }
@@ -1745,31 +1791,52 @@ public class ClientUI extends JFrame {
     // Map để track thời gian nhận video cuối cùng từ mỗi peer
     private final java.util.Map<Long, Long> lastVideoTimeMap = new java.util.concurrent.ConcurrentHashMap<>();
     
+    // Batch updates để giảm lag UI - chỉ update mỗi 50ms (20fps) để giảm CPU load
+    private final java.util.Map<Long, BufferedImage> pendingVideoUpdates = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile long lastUIUpdateTime = 0;
+    private static final long UI_UPDATE_INTERVAL = 50; // 20fps cho UI updates (giảm từ 30fps)
+    
     /**
-     * Cập nhật video từ một peer cụ thể
+     * Cập nhật video từ một peer cụ thể - với batching để giảm lag
      */
     public void updatePeerVideo(long peerSsrc, BufferedImage img) {
-        SwingUtilities.invokeLater(() -> {
-            // Cập nhật thời gian nhận video
-            lastVideoTimeMap.put(peerSsrc, System.currentTimeMillis());
-            
-            // Tạo hoặc lấy VideoRenderer cho peer này (nếu chưa có thì sẽ được tạo trong setPeers)
-            VideoRenderer vr = peerVideoViews.get(peerSsrc);
-            if (vr == null) {
-                // Nếu chưa có trong grid, tạo mới (trường hợp đặc biệt)
-                vr = peerVideoViews.computeIfAbsent(peerSsrc, k -> {
-                    VideoRenderer renderer = new VideoRenderer();
-                    // Tạo avatar từ tên nếu có
-                    String displayName = peerNames.getOrDefault(peerSsrc, "Peer #" + (peerSsrc % 1000));
-                    renderer.setUserName(displayName);
-                    renderer.showAvatar(); // Mặc định avatar
-                    return renderer;
-                });
-            }
-            
-            // Cập nhật frame video
-            vr.updateFrame(img);
-        });
+        // Lưu frame mới nhất vào pending updates
+        pendingVideoUpdates.put(peerSsrc, img);
+        lastVideoTimeMap.put(peerSsrc, System.currentTimeMillis());
+        
+        // Chỉ update UI mỗi 33ms để tránh lag
+        long now = System.currentTimeMillis();
+        if (now - lastUIUpdateTime >= UI_UPDATE_INTERVAL) {
+            lastUIUpdateTime = now;
+            SwingUtilities.invokeLater(() -> {
+                // Update tất cả pending frames trong một lần
+                for (java.util.Map.Entry<Long, BufferedImage> entry : pendingVideoUpdates.entrySet()) {
+                    long ssrc = entry.getKey();
+                    BufferedImage frame = entry.getValue();
+                    
+                    // Tạo hoặc lấy VideoRenderer cho peer này
+                    VideoRenderer vr = peerVideoViews.get(ssrc);
+                    if (vr == null) {
+                        // Nếu chưa có trong grid, tạo mới (trường hợp đặc biệt)
+                        vr = peerVideoViews.computeIfAbsent(ssrc, k -> {
+                            VideoRenderer renderer = new VideoRenderer();
+                            // Tạo avatar từ tên nếu có
+                            String displayName = peerNames.getOrDefault(ssrc, "Peer #" + (ssrc % 1000));
+                            renderer.setUserName(displayName);
+                            renderer.showAvatar(); // Mặc định avatar
+                            return renderer;
+                        });
+                    }
+                    
+                    // Cập nhật frame video
+                    if (frame != null) {
+                        vr.updateFrame(frame);
+                    }
+                }
+                // Clear pending updates sau khi đã render
+                pendingVideoUpdates.clear();
+            });
+        }
     }
     
     /**

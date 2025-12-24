@@ -9,9 +9,11 @@ echo   RTP AV Conference Server
 echo ========================================
 echo.
 echo [INFO] Script nay se mo cac port sau:
-echo   - Port 1099 (TCP) - RMI Registry
-echo   - Port 2099 (TCP) - RMI Service
+echo   - Port 1099 (TCP) - RMI Registry (fallback)
+echo   - Port 2099 (TCP) - RMI Service (fallback)
 echo   - Port 5004 (UDP) - RTP Audio/Video
+echo   - Port 5005 (UDP) - UDP Control (chat, peer updates)
+echo   - Port 5006 (TCP) - TCP Control (login, join, leave)
 echo.
 echo [CHU Y] Can chay voi quyen Administrator!
 echo [CHU Y] Cac rules nay se LUON MO (vi vien)
@@ -54,7 +56,7 @@ if errorlevel 1 (
 )
 
 REM Mo Port 5004 (UDP) - RTP Audio/Video
-echo [3/3] Dang mo Port 5004 (UDP)...
+echo [3/5] Dang mo Port 5004 (UDP)...
 netsh advfirewall firewall delete rule name="RTP AV Conference - RTP Audio/Video (5004)" >nul 2>&1
 netsh advfirewall firewall add rule name="RTP AV Conference - RTP Audio/Video (5004)" dir=in action=allow protocol=UDP localport=5004 >nul 2>&1
 if errorlevel 1 (
@@ -63,15 +65,37 @@ if errorlevel 1 (
     echo [SUCCESS] Da mo Port 5004 (UDP)
 )
 
+REM Mo Port 5005 (UDP) - UDP Control
+echo [4/5] Dang mo Port 5005 (UDP)...
+netsh advfirewall firewall delete rule name="RTP AV Conference - UDP Control (5005)" >nul 2>&1
+netsh advfirewall firewall add rule name="RTP AV Conference - UDP Control (5005)" dir=in action=allow protocol=UDP localport=5005 >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Khong the mo Port 5005!
+) else (
+    echo [SUCCESS] Da mo Port 5005 (UDP)
+)
+
+REM Mo Port 5006 (TCP) - TCP Control
+echo [5/5] Dang mo Port 5006 (TCP)...
+netsh advfirewall firewall delete rule name="RTP AV Conference - TCP Control (5006)" >nul 2>&1
+netsh advfirewall firewall add rule name="RTP AV Conference - TCP Control (5006)" dir=in action=allow protocol=TCP localport=5006 >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Khong the mo Port 5006!
+) else (
+    echo [SUCCESS] Da mo Port 5006 (TCP)
+)
+
 echo.
 echo ========================================
 echo   [HOAN TAT] Da mo tat ca firewall ports!
 echo ========================================
 echo.
 echo [INFO] Cac ports da duoc mo:
-echo   - Port 1099 (TCP) - RMI Registry
-echo   - Port 2099 (TCP) - RMI Service
+echo   - Port 1099 (TCP) - RMI Registry (fallback)
+echo   - Port 2099 (TCP) - RMI Service (fallback)
 echo   - Port 5004 (UDP) - RTP Audio/Video
+echo   - Port 5005 (UDP) - UDP Control (chat, peer updates)
+echo   - Port 5006 (TCP) - TCP Control (login, join, leave)
 echo.
 echo [CHU Y] Cac rules nay la VI VIEN!
 echo [CHU Y] Sau khi tat may va bat lai, cac ports van se MO!

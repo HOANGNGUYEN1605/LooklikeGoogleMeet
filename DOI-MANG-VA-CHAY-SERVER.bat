@@ -33,13 +33,21 @@ echo.
 REM Tim IP LAN hien tai
 echo [INFO] Dang tim IP LAN hien tai...
 powershell -Command ^
-"$adapters = Get-NetAdapter | Where-Object {$_.Status -eq 'Up' -and $_.InterfaceDescription -notlike '*Virtual*' -and $_.InterfaceDescription -notlike '*ZeroTier*'}; ^
+"$adapters = Get-NetAdapter | Where-Object {$_.Status -eq 'Up' -and $_.InterfaceDescription -notlike '*Virtual*' -and $_.InterfaceDescription -notlike '*ZeroTier*' -and $_.InterfaceDescription -notlike '*Hyper-V*' -and $_.InterfaceDescription -notlike '*WSL*'}; ^
 $ip = $null; ^
 foreach ($adapter in $adapters) { ^
     $config = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue; ^
     if ($config) { ^
         $ipAddr = $config.IPAddress; ^
-        if ($ipAddr -match '^192\.168\.' -or $ipAddr -match '^10\.' -or ($ipAddr -match '^172\.(2[0-9]|3[0-1])\.' -and $ipAddr -notmatch '^172\.24\.' -and $ipAddr -notmatch '^172\.30\.')) { ^
+        if ($ipAddr -match '^192\.168\.' -and $ipAddr -notmatch '^192\.168\.56\.') { ^
+            $ip = $ipAddr; ^
+            break; ^
+        } ^
+        if ($ipAddr -match '^10\.') { ^
+            $ip = $ipAddr; ^
+            break; ^
+        } ^
+        if ($ipAddr -match '^172\.(1[6-9]|2[0-9]|3[0-1])\.' -and $ipAddr -notmatch '^172\.24\.' -and $ipAddr -notmatch '^172\.30\.') { ^
             $ip = $ipAddr; ^
             break; ^
         } ^

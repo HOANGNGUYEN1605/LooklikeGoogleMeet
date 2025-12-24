@@ -16,6 +16,22 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class ClientMain {
+    private static DatagramSocket createSocketWithBind(String clientIP, int port) {
+        try {
+            InetAddress bindAddr = InetAddress.getByName(clientIP);
+            DatagramSocket socket = new DatagramSocket(port, bindAddr);
+            System.out.println("[CLIENT] UDP socket bound to " + clientIP + ":" + port);
+            return socket;
+        } catch (Exception e) {
+            System.err.println("[CLIENT] Failed to bind to " + clientIP + ", falling back to 0.0.0.0: " + e.getMessage());
+            try {
+                return new DatagramSocket(port);
+            } catch (Exception e2) {
+                throw new RuntimeException("Failed to create UDP socket on port " + port, e2);
+            }
+        }
+    }
+    
     public static void main(String[] args) throws Exception {
         String serverHost = "localhost";
         int rmiPort = 1099;
@@ -60,29 +76,118 @@ public class ClientMain {
             final String actualName = loginDialog.getDisplayName();
             final String actualRoom = loginDialog.getRoom();
             final String actualServer = loginDialog.getServer();
-            final ConferenceService svc = loginDialog.getConferenceService();
+            final TcpControlClient tcpClient = loginDialog.getTcpClient(); // TCP client (ưu tiên)
+            final ConferenceService svc = loginDialog.getConferenceService(); // RMI fallback
             
             try {
-
-                InetSocketAddress myRtp = NetUtil.endpoint("0.0.0.0", fLocalRtp);
+                // Xác định IP thực của client để gửi cho server
+                // Nếu client trên cùng máy server, dùng IP LAN thực thay vì 0.0.0.0
+                String clientIP = "0.0.0.0";
+                String clientLANIP = NetUtil.findLANIP();
+                if (clientLANIP != null) {
+                    // Kiểm tra xem client có trên cùng máy server không (so sánh IP)
+                    if (actualServer.equals("localhost") || actualServer.equals("127.0.0.1") || 
+                        (clientLANIP != null && actualServer.equals(clientLANIP))) {
+                        // Client trên cùng máy server, dùng IP LAN thực
+                        clientIP = clientLANIP;
+                        System.out.println("[CLIENT] Running on same machine as server, using LAN IP: " + clientIP);
+                    }
+                }
+                
+                InetSocketAddress myRtp = NetUtil.endpoint(clientIP, fLocalRtp);
                 InetSocketAddress serverRtpAddr = new InetSocketAddress(actualServer, fServerRtp);
 
                 ClientUI ui = new ClientUI(actualName, actualRoom, fSsrc, svc, myRtp);
                 ClientCallback cb = new ClientCallbackImpl(ui);
 
-                // gửi join với tên người dùng
-                svc.join(actualRoom, fSsrc, actualName, myRtp.getPort(), (com.example.rtpav.rmi.ClientCallback) cb);
-                ui.addChat("[SYSTEM]", "RMI connected to " + actualServer + ":" + fRmiPort);
-                ui.addChat("[SYSTEM]", "Joined room " + actualRoom + ", UDP bind=" + myRtp);
+                // UDP Control Client - cho chat và peer updates (giảm lag)
+                int udpControlPort = fLocalRtp + 10000; // Port riêng cho control (tránh conflict với RTP)
+                InetSocketAddress serverControlAddr = new InetSocketAddress(actualServer, 5005); // Server UDP control port
+                UdpControlClient udpControl = new UdpControlClient(udpControlPort, serverControlAddr, fSsrc, actualName, ui);
+                Thread udpControlThread = new Thread(udpControl, "UdpControlClient");
+                udpControlThread.setDaemon(true);
+                udpControlThread.start();
+                
+                // Register control endpoint với server
+                udpControl.registerEndpoint();
+                // Keepalive mỗi 5 giây
+                java.util.concurrent.ScheduledExecutorService keepalivePool = java.util.concurrent.Executors.newScheduledThreadPool(1);
+                keepalivePool.scheduleAtFixedRate(() -> udpControl.registerEndpoint(), 5, 5, java.util.concurrent.TimeUnit.SECONDS);
+
+                // Join room - ưu tiên dùng TCP (nhanh hơn, không lag)
+                long joinStartTime = System.currentTimeMillis();
+                java.util.Set<com.example.rtpav.rmi.PeerInfo> initialPeers = new java.util.HashSet<>();
+                
+                if (tcpClient != null) {
+                    // Use TCP
+                    initialPeers = tcpClient.join(actualRoom, fSsrc, actualName, myRtp.getPort());
+                    long joinTime = System.currentTimeMillis() - joinStartTime;
+                    ui.addChat("[SYSTEM]", "TCP connected to " + actualServer + ":5006");
+                    ui.addChat("[SYSTEM]", "Joined room " + actualRoom + ", UDP bind=" + myRtp + " (took " + joinTime + "ms)");
+                } else if (svc != null) {
+                    // Fallback to RMI
+                    svc.join(actualRoom, fSsrc, actualName, myRtp.getPort(), (com.example.rtpav.rmi.ClientCallback) cb);
+                    long joinTime = System.currentTimeMillis() - joinStartTime;
+                    ui.addChat("[SYSTEM]", "RMI connected to " + actualServer + ":" + fRmiPort);
+                    ui.addChat("[SYSTEM]", "Joined room " + actualRoom + ", UDP bind=" + myRtp + " (took " + joinTime + "ms)");
+                    // Get peers via RMI
+                    try {
+                        initialPeers = svc.getPeers(actualRoom);
+                    } catch (Exception e) {
+                        System.err.println("[CLIENT] Error getting peers via RMI: " + e.getMessage());
+                    }
+                }
+                
+                // Khai báo pool và cam trước để dùng cho polling
+                VideoCapture cam = new VideoCapture();
+                var pool = new ScheduledThreadPoolExecutor(4); // Tăng thread pool để hỗ trợ async operations
+                
+                // Set initial peers
+                if (!initialPeers.isEmpty()) {
+                    ui.setPeers(initialPeers);
+                    ui.setLastPeerCount(initialPeers.size());
+                    ui.addChat("[SYSTEM]", "Peers = " + initialPeers.size() + " (from TCP)");
+                    System.out.println("[CLIENT] Initial peers count: " + initialPeers.size());
+                    for (var p : initialPeers) {
+                        System.out.println("[CLIENT]   Peer: SSRC=" + p.getSsrc() + ", name=" + p.getName() + ", endpoint=" + p.getRtpEndpoint());
+                    }
+                }
+                
+                // Polling để refresh peers (fallback nếu UDP peer updates không hoạt động)
+                final TcpControlClient finalTcpClient = tcpClient;
+                final ConferenceService finalSvc = svc;
+                pool.scheduleAtFixedRate(() -> {
+                    try {
+                        java.util.Set<com.example.rtpav.rmi.PeerInfo> peers;
+                        if (finalTcpClient != null) {
+                            peers = finalTcpClient.getPeers(actualRoom);
+                        } else if (finalSvc != null) {
+                            peers = finalSvc.getPeers(actualRoom);
+                        } else {
+                            return;
+                        }
+                        
+                        int currentCount = peers.size();
+                        int lastCount = ui.getLastPeerCount();
+                        if (currentCount != lastCount) {
+                            System.out.println("[CLIENT] Peers changed (polling): " + lastCount + " -> " + currentCount);
+                            ui.setPeers(peers);
+                            ui.setLastPeerCount(currentCount);
+                        }
+                    } catch (Exception e) {
+                        // Ignore
+                    }
+                }, 2, 2, TimeUnit.SECONDS); // Poll mỗi 2 giây
 
                 // UDP socket để gửi/nhận video
-                DatagramSocket udpSocket = new DatagramSocket(fLocalRtp);
-                udpSocket.setSendBufferSize(1 << 20);
-                udpSocket.setReceiveBufferSize(1 << 20);
-
-                // camera loop
-                VideoCapture cam = new VideoCapture();
-                var pool = new ScheduledThreadPoolExecutor(2);
+                // Nếu client trên cùng máy server, bind vào IP LAN thực để nhận packet từ client khác
+                final DatagramSocket udpSocket = clientIP.equals("0.0.0.0") 
+                    ? new DatagramSocket(fLocalRtp)  // Client trên máy khác, bind vào tất cả interfaces
+                    : createSocketWithBind(clientIP, fLocalRtp);  // Client trên cùng máy server, bind vào IP LAN thực
+                // Tối ưu buffer sizes để giảm lag
+                udpSocket.setSendBufferSize(2 << 20); // 2MB
+                udpSocket.setReceiveBufferSize(2 << 20); // 2MB
+                udpSocket.setReuseAddress(true);
 
                 // Audio handler - khai báo trước để cả UDP receiver và hooks đều dùng được
                 com.example.rtpav.client.media.AudioIO audio = null;
@@ -90,8 +195,9 @@ public class ClientMain {
                 // Track audio sending thread để tránh tạo nhiều thread
                 final java.util.concurrent.atomic.AtomicReference<Thread> audioSendingThreadRef = new java.util.concurrent.atomic.AtomicReference<>();
 
-                // UDP receiver để nhận video từ peers
+                // UDP receiver để nhận video từ peers - tối ưu để giảm lag
                 final boolean[] firstFrameReceived = {false};
+                final java.util.concurrent.atomic.AtomicInteger pendingDecodes = new java.util.concurrent.atomic.AtomicInteger(0);
                 pool.submit(() -> {
                     byte[] buf = new byte[64 * 1024];
                     DatagramPacket pkt = new DatagramPacket(buf, buf.length);
@@ -108,23 +214,34 @@ public class ClientMain {
                             byte mediaType = bb.get();
 
                             if (mediaType == 0) { // video
+                                // Skip frame nếu có quá nhiều pending decodes (tránh lag)
+                                if (pendingDecodes.get() > 3) {
+                                    continue;
+                                }
+                                
                                 int payloadLen = pkt.getLength() - 9;
                                 byte[] jpeg = new byte[payloadLen];
                                 System.arraycopy(pkt.getData(), 9, jpeg, 0, payloadLen);
 
-                                try {
-                                    BufferedImage img = ImageIO.read(new ByteArrayInputStream(jpeg));
-                                    if (img != null) {
-                                        // Cập nhật video cho peer cụ thể
-                                        ui.updatePeerVideo(peerSsrc, img);
-                                        if (!firstFrameReceived[0]) {
-                                            System.out.println("[CLIENT] Received video from peer SSRC=" + peerSsrc);
-                                            firstFrameReceived[0] = true;
+                                // Decode JPEG trong background thread để không block
+                                pendingDecodes.incrementAndGet();
+                                pool.execute(() -> {
+                                    try {
+                                        BufferedImage img = ImageIO.read(new ByteArrayInputStream(jpeg));
+                                        if (img != null) {
+                                            // Cập nhật video cho peer cụ thể
+                                            ui.updatePeerVideo(peerSsrc, img);
+                                            if (!firstFrameReceived[0]) {
+                                                System.out.println("[CLIENT] Received video from peer SSRC=" + peerSsrc);
+                                                firstFrameReceived[0] = true;
+                                            }
                                         }
+                                    } catch (Exception e) {
+                                        // Ignore decode errors
+                                    } finally {
+                                        pendingDecodes.decrementAndGet();
                                     }
-                                } catch (Exception e) {
-                                    // Ignore decode errors
-                                }
+                                });
                             } else if (mediaType == 1) { // audio
                                 int payloadLen = pkt.getLength() - 9;
                                 byte[] audioData = new byte[payloadLen];
@@ -161,6 +278,23 @@ public class ClientMain {
                 pool.scheduleAtFixedRate(() -> {
                     ui.checkAndShowAvatars();
                 }, 2, 1, TimeUnit.SECONDS);
+                
+                // Polling để tự động refresh peers list mỗi 1 giây (fallback nếu callback không hoạt động)
+                // Giảm interval để phát hiện peers mới nhanh hơn
+                pool.scheduleAtFixedRate(() -> {
+                    try {
+                        var peers = svc.getPeers(actualRoom);
+                        int currentCount = peers.size();
+                        int lastCount = ui.getLastPeerCount();
+                        if (currentCount != lastCount) {
+                            System.out.println("[CLIENT] Peers changed (polling): " + lastCount + " -> " + currentCount);
+                            ui.setPeers(peers);
+                            ui.setLastPeerCount(currentCount);
+                        }
+                    } catch (Exception e) {
+                        // Ignore polling errors, sẽ retry lần sau
+                    }
+                }, 1, 1, TimeUnit.SECONDS); // 1 giây để phát hiện nhanh hơn
                 
                 ui.setHooks(new ClientUI.ExtendedHooks() {
                     @Override 
@@ -304,28 +438,45 @@ public class ClientMain {
                     
                     @Override 
                     public void onSendChat(String msg) {
-                        try { 
-                            svc.sendChat(fRoom, fSsrc, fName, msg); 
-                        } catch (Exception ignored) {} 
+                        // Ưu tiên dùng UDP (nhanh hơn, không block)
+                        udpControl.sendChat(fRoom, msg);
+                        // Fallback: vẫn gửi qua RMI nếu UDP fail (silent)
+                        pool.execute(() -> {
+                            try { 
+                                svc.sendChat(fRoom, fSsrc, fName, msg); 
+                            } catch (Exception e) {
+                                // Ignore - UDP đã gửi rồi
+                            }
+                        });
                     }
                     
                     @Override
                     public void onSendPrivateChat(long toSsrc, String msg) {
-                        try {
-                            System.out.printf("[CLIENT] Sending private chat: toSsrc=%d, msg=%s%n", toSsrc, msg);
-                            svc.sendPrivateChat(fRoom, fSsrc, fName, toSsrc, msg);
-                            System.out.printf("[CLIENT] Private chat sent successfully%n");
-                        } catch (Exception e) {
-                            System.err.println("[CLIENT] Error sending private chat: " + e.getMessage());
-                            e.printStackTrace();
-                        }
+                        // Ưu tiên dùng UDP (nhanh hơn, không block)
+                        udpControl.sendPrivateChat(toSsrc, msg);
+                        // Fallback: vẫn gửi qua RMI nếu UDP fail (silent)
+                        pool.execute(() -> {
+                            try {
+                                svc.sendPrivateChat(fRoom, fSsrc, fName, toSsrc, msg);
+                            } catch (Exception e) {
+                                // Ignore - UDP đã gửi rồi
+                            }
+                        });
                     }
                     
                     @Override 
                     public void onClose() {
-                        try { 
-                            svc.leave(fSsrc); 
-                        } catch (Exception ignored) {}
+                        // Leave room - ưu tiên dùng TCP
+                        if (tcpClient != null) {
+                            tcpClient.leave(fSsrc);
+                            tcpClient.close();
+                        } else if (svc != null) {
+                            try { 
+                                svc.leave(fSsrc); 
+                            } catch (Exception ignored) {}
+                        }
+                        udpControl.close();
+                        keepalivePool.shutdownNow();
                         cam.close();
                         if (audioRef[0] != null) {
                             try {
@@ -337,9 +488,12 @@ public class ClientMain {
                     }
                 });
 
-                // Video capture và gửi loop
+                // Video capture và gửi loop - giảm xuống 8fps (125ms) để giảm CPU load tối đa
                 final boolean[] firstFrameSent = {false};
                 final boolean[] wasCamOn = {false};
+                final long[] lastFrameTime = {0};
+                final java.util.concurrent.atomic.AtomicInteger pendingFrames = new java.util.concurrent.atomic.AtomicInteger(0);
+                
                 pool.scheduleAtFixedRate(() -> {
                     try {
                         boolean currentlyOn = cam.isCamOn();
@@ -355,38 +509,73 @@ public class ClientMain {
                             return;
                         }
                         
-                        byte[] jpeg = cam.captureJpeg();
-                        if (jpeg == null || jpeg.length == 0) return;
-
-                        // Hiển thị local
-                        BufferedImage img = ImageIO.read(new ByteArrayInputStream(jpeg));
-                        if (img != null) {
-                            SwingUtilities.invokeLater(() -> ui.updateSelf(img));
+                        // Throttle frame rate - 8fps (125ms) và skip nếu có quá nhiều pending frames
+                        long now = System.currentTimeMillis();
+                        if (now - lastFrameTime[0] < 125) { // Tối thiểu 125ms giữa các frame (8fps)
+                            return;
                         }
-
-                        // Gửi đến server để forward cho peers
-                        ByteBuffer header = ByteBuffer.allocate(9);
-                        header.putLong(fSsrc);
-                        header.put((byte) 0); // mediaType = 0 (video)
-
-                        byte[] packet = new byte[9 + jpeg.length];
-                        System.arraycopy(header.array(), 0, packet, 0, 9);
-                        System.arraycopy(jpeg, 0, packet, 9, jpeg.length);
-
-                        DatagramPacket udpPkt = new DatagramPacket(
-                            packet, packet.length, 
-                            serverRtpAddr
-                        );
-                        udpSocket.send(udpPkt);
                         
-                        if (!firstFrameSent[0]) {
-                            System.out.println("[CLIENT] Sending video to server " + serverRtpAddr + ", SSRC=" + fSsrc);
-                            firstFrameSent[0] = true;
+                        // Skip frame nếu có quá nhiều pending (tránh lag)
+                        if (pendingFrames.get() > 2) {
+                            return;
                         }
+                        
+                        lastFrameTime[0] = now;
+                        pendingFrames.incrementAndGet();
+                        
+                        // Capture và encode trong background thread để không block
+                        pool.execute(() -> {
+                            try {
+                                byte[] jpeg = cam.captureJpeg();
+                                if (jpeg == null || jpeg.length == 0) {
+                                    pendingFrames.decrementAndGet();
+                                    return;
+                                }
+
+                                // Hiển thị local (async, skip nếu có quá nhiều pending)
+                                if (pendingFrames.get() <= 3) {
+                                    final byte[] jpegCopy = jpeg.clone();
+                                    SwingUtilities.invokeLater(() -> {
+                                        try {
+                                            BufferedImage img = ImageIO.read(new ByteArrayInputStream(jpegCopy));
+                                            if (img != null) {
+                                                ui.updateSelf(img);
+                                            }
+                                        } catch (Exception e) {
+                                            // Ignore decode errors
+                                        }
+                                    });
+                                }
+
+                                // Gửi đến server (non-blocking)
+                                ByteBuffer header = ByteBuffer.allocate(9);
+                                header.putLong(fSsrc);
+                                header.put((byte) 0); // mediaType = 0 (video)
+
+                                byte[] packet = new byte[9 + jpeg.length];
+                                System.arraycopy(header.array(), 0, packet, 0, 9);
+                                System.arraycopy(jpeg, 0, packet, 9, jpeg.length);
+
+                                DatagramPacket udpPkt = new DatagramPacket(
+                                    packet, packet.length, 
+                                    serverRtpAddr
+                                );
+                                udpSocket.send(udpPkt);
+                                
+                                if (!firstFrameSent[0]) {
+                                    System.out.println("[CLIENT] Sending video to server " + serverRtpAddr + ", SSRC=" + fSsrc + ", frame size=" + jpeg.length + " bytes");
+                                    firstFrameSent[0] = true;
+                                }
+                            } catch (Exception e) {
+                                System.err.println("[CLIENT] Error sending video: " + e.getMessage());
+                            } finally {
+                                pendingFrames.decrementAndGet();
+                            }
+                        });
                     } catch (Exception e) {
-                        System.err.println("[CLIENT] Error sending video: " + e.getMessage());
+                        System.err.println("[CLIENT] Error in video loop: " + e.getMessage());
                     }
-                }, 0, 100, TimeUnit.MILLISECONDS);
+                }, 0, 125, TimeUnit.MILLISECONDS); // 8fps (125ms interval) để giảm CPU load tối đa
 
                 ui.setVisible(true);
             } catch (Exception e) {

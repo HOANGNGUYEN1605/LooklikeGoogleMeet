@@ -1,0 +1,127 @@
+========================================
+HƯỚNG DẪN KHI TẮT MÁY, BẬT LẠI VÀ ĐỔI MẠNG
+RTP AV Conference
+========================================
+
+Khi bạn tắt máy, bật lại và đổi mạng (WiFi/Router), bạn cần làm các bước sau:
+
+========================================
+TRÊN MÁY SERVER:
+========================================
+
+BƯỚC 1: Chạy script tự động (KHUYẾN NGHỊ)
+----------------------------------------
+Chạy file: DOI-MANG-VA-CHAY-SERVER.bat
+
+Script này sẽ TỰ ĐỘNG:
+✓ Tìm IP LAN mới của server
+✓ Cập nhật IP mới vào tất cả START-CLIENT-*.bat
+✓ Kiểm tra Docker
+✓ Khởi động MySQL container
+✓ Khởi động server
+
+Sau khi chạy xong, bạn sẽ thấy:
+- IP LAN mới: 192.168.x.x (hoặc 10.x.x.x)
+- MySQL container: DANG CHAY
+- Server: DANG KHOI DONG
+
+Đợi đến khi thấy "RMI ready" trong cửa sổ server!
+
+
+BƯỚC 2: Kiểm tra Firewall (Nếu cần)
+----------------------------------------
+Firewall ports đã được mở VĨNH VIỄN, nhưng nếu cần kiểm tra:
+- Chạy: MO-FIREWALL-PORTS.bat (với quyền Administrator)
+- Hoặc chạy: KIEM-TRA-FIREWALL-PORTS.bat
+
+Các ports cần mở:
+- Port 1099 (TCP) - RMI Registry (fallback)
+- Port 2099 (TCP) - RMI Service (fallback)
+- Port 5004 (UDP) - RTP Audio/Video
+- Port 5005 (UDP) - UDP Control (chat, peer updates)
+- Port 5006 (TCP) - TCP Control (login, join, leave)
+
+
+========================================
+TRÊN MÁY CLIENT:
+========================================
+
+BƯỚC 1: Lấy IP mới của server
+----------------------------------------
+Có 2 cách:
+
+CÁCH 1: Hỏi người dùng trên máy server
+- Họ đã chạy DOI-MANG-VA-CHAY-SERVER.bat
+- IP mới sẽ hiển thị trong cửa sổ script
+
+CÁCH 2: Ping từ máy client
+- Mở Command Prompt
+- Chạy: ping <tên-máy-server> (nếu trong cùng mạng)
+- Hoặc dùng: arp -a để xem danh sách IP trong mạng
+
+
+BƯỚC 2: Cập nhật IP server trong client scripts
+----------------------------------------
+Có 2 cách:
+
+CÁCH 1: Sửa thủ công (Nhanh)
+- Mở file START-CLIENT-1.bat (hoặc START-CLIENT-2.bat, ...)
+- Tìm dòng: set SERVER_IP=192.168.50.129
+- Thay IP cũ bằng IP mới của server
+- Lưu file
+
+CÁCH 2: Dùng script PowerShell (Nếu có)
+- Mở file CAP-NHAT-IP-NHANH.ps1
+- Sửa dòng: $serverIP = "192.168.50.129" thành IP mới
+- Chạy: CAP-NHAT-IP-NHANH.bat
+
+
+BƯỚC 3: Chạy client
+----------------------------------------
+- Chạy: START-CLIENT-1.bat (hoặc client khác)
+- Đăng nhập với tài khoản của bạn
+- Kết nối sẽ dùng TCP/UDP mới (nhanh, không lag)
+
+
+========================================
+TÓM TẮT NHANH:
+========================================
+
+TRÊN MÁY SERVER:
+1. Chạy: DOI-MANG-VA-CHAY-SERVER.bat
+2. Đợi server khởi động xong (thấy "RMI ready")
+
+TRÊN MÁY CLIENT:
+1. Lấy IP mới của server
+2. Sửa IP trong START-CLIENT-*.bat
+3. Chạy client
+
+========================================
+LƯU Ý QUAN TRỌNG:
+========================================
+
+✓ Firewall ports đã mở VĨNH VIỄN - không cần mở lại
+✓ Docker và MySQL container sẽ tự động khởi động
+✓ Script DOI-MANG-VA-CHAY-SERVER.bat tự động cập nhật IP
+✓ Chỉ cần cập nhật IP trên máy CLIENT
+
+========================================
+KIỂM TRA KẾT NỐI:
+========================================
+
+Sau khi cập nhật IP, kiểm tra kết nối:
+
+1. Từ máy client, ping server:
+   ping <IP-SERVER>
+
+2. Kiểm tra ports:
+   Test-NetConnection -ComputerName <IP-SERVER> -Port 5006
+   Test-NetConnection -ComputerName <IP-SERVER> -Port 5005 -Udp
+
+3. Nếu ping được nhưng không kết nối được:
+   - Kiểm tra firewall trên server
+   - Kiểm tra server đã khởi động chưa
+   - Kiểm tra IP đã đúng chưa
+
+========================================
+

@@ -148,7 +148,7 @@ netsh advfirewall firewall show rule name="RTP AV Conference - RMI Registry (109
 if errorlevel 1 (
     echo.
     echo [WARNING] Firewall ports chưa được mở!
-    echo [WARNING] Cần mở các port: 1099, 2099 (TCP) và 5004 (UDP)
+    echo [WARNING] Cần mở các port: 1099, 2099 (TCP), 5004, 5005 (UDP), 5006 (TCP)
     echo.
     echo Bạn có muốn mở firewall ports ngay bây giờ không?
     echo [CHU Y] Can chay voi quyen Administrator!
@@ -160,17 +160,7 @@ if errorlevel 1 (
         echo [CHU Y] Neu hien loi, vui long chay MO-FIREWALL-PORTS.bat voi quyen Administrator!
         echo.
         REM Thử mở ports (cần quyền admin)
-        netsh advfirewall firewall delete rule name="RTP AV Conference - RMI Registry (1099)" >nul 2>&1
-        netsh advfirewall firewall add rule name="RTP AV Conference - RMI Registry (1099)" dir=in action=allow protocol=TCP localport=1099 >nul 2>&1
-        
-        netsh advfirewall firewall delete rule name="RTP AV Conference - RMI Service (2099)" >nul 2>&1
-        netsh advfirewall firewall add rule name="RTP AV Conference - RMI Service (2099)" dir=in action=allow protocol=TCP localport=2099 >nul 2>&1
-        
-        netsh advfirewall firewall delete rule name="RTP AV Conference - RTP Audio/Video (5004)" >nul 2>&1
-        netsh advfirewall firewall add rule name="RTP AV Conference - RTP Audio/Video (5004)" dir=in action=allow protocol=UDP localport=5004 >nul 2>&1
-        
-        echo [INFO] Da thu mo firewall ports!
-        echo [INFO] Neu khong thanh cong, chay MO-FIREWALL-PORTS.bat voi quyen Administrator.
+        call MO-FIREWALL-PORTS.bat
         echo.
     ) else (
         echo Bỏ qua mở firewall ports.
@@ -179,7 +169,7 @@ if errorlevel 1 (
     )
 ) else (
     echo Firewall ports da duoc mo!
-    echo [INFO] Cac ports: 1099, 2099 (TCP) va 5004 (UDP) da duoc mo.
+    echo [INFO] Cac ports: 1099, 2099 (TCP), 5004, 5005 (UDP), 5006 (TCP) da duoc mo.
     echo.
 )
 
@@ -201,7 +191,11 @@ echo ========================================
 echo Setup hoàn tất!
 echo ========================================
 echo.
-echo Bạn có thể:
+echo [NEU DOI MANG] Chay script sau:
+echo   DOI-MANG-VA-CHAY-SERVER.bat
+echo   (Script nay se tu dong cap nhat IP va khoi dong server)
+echo.
+echo [NEU KHONG DOI MANG] Ban co the:
 echo   1. Chạy server: START-SERVER.bat
 echo   2. Chạy client: START-CLIENT-1.bat (hoặc các client khác)
 echo.

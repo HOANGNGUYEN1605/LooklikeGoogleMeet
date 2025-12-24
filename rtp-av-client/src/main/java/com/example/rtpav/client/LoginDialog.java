@@ -39,7 +39,8 @@ public class LoginDialog extends JDialog {
     private String displayName;
     private String room;
     private String server;
-    private ConferenceService conferenceService;
+    private ConferenceService conferenceService; // Fallback RMI
+    private TcpControlClient tcpClient; // TCP client (ưu tiên)
     private String defaultServer;
     
     public LoginDialog(Frame parent, String defaultServer) {
@@ -354,23 +355,23 @@ public class LoginDialog extends JDialog {
         // Perform login in background thread
         new Thread(() -> {
             try {
-                // Connect to RMI
-                int rmiPort = 1099;
-                System.out.println("[LOGIN] Attempting to connect to server: " + finalServer + ":" + rmiPort);
-                var reg = LocateRegistry.getRegistry(finalServer, rmiPort);
-                System.out.println("[LOGIN] RMI Registry located, looking up service...");
-                ConferenceService svc = (ConferenceService) reg.lookup("conference");
-                System.out.println("[LOGIN] Service found, calling login API...");
+                // Ưu tiên dùng TCP (nhanh hơn, không lag)
+                int tcpPort = 5006;
+                System.out.println("[LOGIN] Attempting TCP connection to server: " + finalServer + ":" + tcpPort);
+                TcpControlClient tcp = new TcpControlClient(finalServer, tcpPort);
+                if (!tcp.connect()) {
+                    throw new Exception("Failed to connect via TCP");
+                }
                 
-                // Call login API
-                String displayName = svc.login(username, password);
+                // Call login API via TCP
+                String displayName = tcp.login(username, password);
                 
                 SwingUtilities.invokeLater(() -> {
                     if (displayName != null) {
+                        this.tcpClient = tcp; // Store TCP client
                         this.displayName = displayName;
                         this.room = finalRoom;
                         this.server = finalServer;
-                        this.conferenceService = svc;
                         this.joined = true;
                         dispose();
                     } else {
@@ -445,33 +446,36 @@ public class LoginDialog extends JDialog {
         // Perform registration in background thread
         new Thread(() -> {
             try {
-                // Connect to RMI
-                int rmiPort = 1099;
-                var reg = LocateRegistry.getRegistry(finalServer, rmiPort);
-                ConferenceService svc = (ConferenceService) reg.lookup("conference");
+                // Ưu tiên dùng TCP (nhanh hơn, không lag)
+                int tcpPort = 5006;
+                System.out.println("[REGISTER] Attempting TCP connection to server: " + finalServer + ":" + tcpPort);
+                TcpControlClient tcp = new TcpControlClient(finalServer, tcpPort);
+                if (!tcp.connect()) {
+                    throw new Exception("Failed to connect via TCP");
+                }
                 
-                // Call register API
-                String resultDisplayName = svc.register(username, password, finalDisplayName, email);
+                // Call register API via TCP
+                String resultDisplayName = tcp.register(username, password, finalDisplayName, email);
                 
                 SwingUtilities.invokeLater(() -> {
                     if (resultDisplayName != null) {
+                        this.tcpClient = tcp; // Store TCP client
                         this.displayName = resultDisplayName;
                         this.room = finalRoom;
                         this.server = finalServer;
-                        this.conferenceService = svc;
                         this.joined = true;
                         dispose();
-                    } else {
-                        // Thông báo lỗi rõ ràng hơn
-                        showError("Đăng ký thất bại!\n\n" +
-                                "Tên đăng nhập \"" + username + "\" đã tồn tại trong hệ thống.\n\n" +
-                                "Vui lòng:\n" +
-                                "• Chọn tên đăng nhập khác (ví dụ: " + username + "1, " + username + "_new)\n" +
-                                "• Hoặc đăng nhập với tài khoản này nếu bạn đã đăng ký trước đó\n\n" +
-                                "Lưu ý: Tên đăng nhập phân biệt chữ hoa/thường.");
-                        registerButton.setEnabled(true);
-                        registerButton.setText("Đăng ký");
-                    }
+                        } else {
+                            // Thông báo lỗi rõ ràng hơn
+                            showError("Đăng ký thất bại!\n\n" +
+                                    "Tên đăng nhập \"" + username + "\" đã tồn tại trong hệ thống.\n\n" +
+                                    "Vui lòng:\n" +
+                                    "• Chọn tên đăng nhập khác (ví dụ: " + username + "1, " + username + "_new)\n" +
+                                    "• Hoặc đăng nhập với tài khoản này nếu bạn đã đăng ký trước đó\n\n" +
+                                    "Lưu ý: Tên đăng nhập phân biệt chữ hoa/thường.");
+                            registerButton.setEnabled(true);
+                            registerButton.setText("Đăng ký");
+                        }
                 });
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
@@ -501,7 +505,11 @@ public class LoginDialog extends JDialog {
     }
     
     public ConferenceService getConferenceService() {
-        return conferenceService;
+        return conferenceService; // Fallback RMI
+    }
+    
+    public TcpControlClient getTcpClient() {
+        return tcpClient; // TCP client (ưu tiên)
     }
     
     public boolean isJoined() {

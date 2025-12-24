@@ -4,10 +4,14 @@ import com.github.sarxos.webcam.Webcam;
 import com.github.sarxos.webcam.WebcamException;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
+import java.util.Iterator;
 
 /**
  * VideoCapture với webcam thật:
@@ -25,6 +29,8 @@ public class VideoCapture implements AutoCloseable {
     private Webcam webcam = null;
     private final Dimension captureSize = new Dimension(640, 480);
     private volatile boolean webcamInitialized = false;
+    private static final float JPEG_QUALITY = 0.5f; // Giảm quality xuống 50% để giảm bandwidth và CPU tối đa
+    private static final int MAX_JPEG_SIZE = 30 * 1024; // Tối đa 30KB cho mỗi frame
 
     public VideoCapture() {
         this.avatar = loadAvatarOrFallback();
@@ -199,9 +205,84 @@ public class VideoCapture implements AutoCloseable {
                 return null;
             }
             
+            // Resize xuống 480x360 để giảm bandwidth và CPU tối đa
+            BufferedImage resizedImg = img;
+            int targetWidth = 480;
+            int targetHeight = 360;
+            if (img.getWidth() > targetWidth || img.getHeight() > targetHeight) {
+                int newWidth = Math.min(img.getWidth(), targetWidth);
+                int newHeight = Math.min(img.getHeight(), targetHeight);
+                // Giữ tỷ lệ khung hình
+                double aspectRatio = (double) img.getWidth() / img.getHeight();
+                if (newWidth / aspectRatio > newHeight) {
+                    newWidth = (int) (newHeight * aspectRatio);
+                } else {
+                    newHeight = (int) (newWidth / aspectRatio);
+                }
+                
+                Image scaled = img.getScaledInstance(newWidth, newHeight, Image.SCALE_SMOOTH);
+                resizedImg = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
+                Graphics2D g2d = resizedImg.createGraphics();
+                g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                g2d.drawImage(scaled, 0, 0, null);
+                g2d.dispose();
+            }
+            
+            // Encode JPEG với quality tối ưu
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            ImageIO.write(img, "jpeg", out);
-            return out.toByteArray();
+            try {
+                Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpeg");
+                if (writers.hasNext()) {
+                    ImageWriter writer = writers.next();
+                    ImageWriteParam param = writer.getDefaultWriteParam();
+                    if (param.canWriteCompressed()) {
+                        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                        param.setCompressionQuality(JPEG_QUALITY);
+                    }
+                    try (ImageOutputStream ios = ImageIO.createImageOutputStream(out)) {
+                        writer.setOutput(ios);
+                        writer.write(null, new javax.imageio.IIOImage(resizedImg, null, null), param);
+                    }
+                    writer.dispose();
+                } else {
+                    // Fallback: dùng ImageIO.write nếu không có writer hỗ trợ compression
+                    ImageIO.write(resizedImg, "jpeg", out);
+                }
+            } catch (Exception e) {
+                // Fallback: dùng ImageIO.write nếu có lỗi
+                ImageIO.write(resizedImg, "jpeg", out);
+            }
+            
+            byte[] jpegData = out.toByteArray();
+            
+            // Nếu vẫn quá lớn, giảm quality thêm
+            if (jpegData.length > MAX_JPEG_SIZE) {
+                float lowerQuality = JPEG_QUALITY * 0.7f; // Giảm thêm 30%
+                out = new ByteArrayOutputStream();
+                try {
+                    Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpeg");
+                    if (writers.hasNext()) {
+                        ImageWriter writer = writers.next();
+                        ImageWriteParam param = writer.getDefaultWriteParam();
+                        if (param.canWriteCompressed()) {
+                            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                            param.setCompressionQuality(lowerQuality);
+                        }
+                        try (ImageOutputStream ios = ImageIO.createImageOutputStream(out)) {
+                            writer.setOutput(ios);
+                            writer.write(null, new javax.imageio.IIOImage(resizedImg, null, null), param);
+                        }
+                        writer.dispose();
+                    } else {
+                        ImageIO.write(resizedImg, "jpeg", out);
+                    }
+                } catch (Exception e) {
+                    ImageIO.write(resizedImg, "jpeg", out);
+                }
+                jpegData = out.toByteArray();
+            }
+            
+            return jpegData;
         } catch (Exception e) {
             System.err.println("Error capturing frame: " + e.getMessage());
             return null;
